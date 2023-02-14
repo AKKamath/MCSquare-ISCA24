@@ -95,6 +95,7 @@ void workend(ThreadContext *tc, uint64_t workid, uint64_t threadid);
 void m5Syscall(ThreadContext *tc);
 void togglesync(ThreadContext *tc);
 void triggerWorkloadEvent(ThreadContext *tc);
+void memcpy_elide(ThreadContext *tc, Addr dest, Addr src, uint64_t len);
 
 /**
  * Execute a decoded M5 pseudo instruction
@@ -213,9 +214,11 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
       case M5OP_WORK_END:
         invokeSimcall<ABI>(tc, workend);
         return true;
+      case M5OP_RESERVED2:
+        invokeSimcall<ABI>(tc, memcpy_elide);
+        return true;
 
       case M5OP_RESERVED1:
-      case M5OP_RESERVED2:
       case M5OP_RESERVED3:
       case M5OP_RESERVED4:
       case M5OP_RESERVED5:

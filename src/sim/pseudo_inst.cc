@@ -484,6 +484,12 @@ triggerWorkloadEvent(ThreadContext *tc)
     tc->getSystemPtr()->workload->event(tc);
 }
 
+void
+memcpy_elide(ThreadContext *tc, Addr dest, Addr src, uint64_t len)
+{
+    printf("pseudo_inst::memcpy_elide(dest = %lx, src = %lx, len = %ld)\n", dest, src, len);
+}
+
 //
 // This function is executed when annotated work items begin.  Depending on
 // what the user specified at the command line, the simulation may exit and/or

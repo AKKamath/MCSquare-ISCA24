@@ -66,6 +66,7 @@ void m5_load_symbol();
 void m5_panic(void);
 void m5_work_begin(uint64_t workid, uint64_t threadid);
 void m5_work_end(uint64_t workid, uint64_t threadid);
+void m5_memcpy_elide(void* dest, void* src, uint64_t len);
 
 /*
  * Send a very generic poke to the workload so it can do something. It's up to
