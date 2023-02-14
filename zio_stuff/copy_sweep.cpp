@@ -199,6 +199,7 @@ static void *receiver_run(void *arg)
         }
     }
 
+    m5_exit(0);
     m5_memcpy_elide(buff_copy, buff, max_bytes);
 
     // Stop counting and read value
