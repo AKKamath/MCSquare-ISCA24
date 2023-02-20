@@ -487,7 +487,8 @@ triggerWorkloadEvent(ThreadContext *tc)
 void
 memcpy_elide(ThreadContext *tc, Addr dest, Addr src, uint64_t len)
 {
-    printf("pseudo_inst::memcpy_elide(dest = %lx, src = %lx, len = %ld)\n", dest, src, len);
+    DPRINTF(PseudoInst, "pseudo_inst::memcpy_elide(dest = %lx, src = %lx, "
+        "len = %ld)\n", dest, src, len);
 }
 
 //
