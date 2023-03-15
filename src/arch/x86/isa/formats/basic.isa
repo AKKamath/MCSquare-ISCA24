@@ -100,3 +100,75 @@ def format BasicOperate(code, *flags) {{
         decode_block = BasicDecode.subst(iop)
         exec_output = BasicExecute.subst(iop)
 }};
+
+// Basic Mem instruction
+def template BasicMemDeclare {{
+    class %(class_name)s : public %(base_class)s
+    {
+      private:
+        %(reg_idx_arr_decl)s;
+
+      public:
+        // Constructor.
+        %(class_name)s(ExtMachInst machInst);
+        Fault execute(ExecContext *, Trace::InstRecord *) const override;
+        Fault initiateAcc(ExecContext *, Trace::InstRecord *) const override;
+        Fault completeAcc(PacketPtr, ExecContext *,
+                          Trace::InstRecord *) const override;
+    };
+}};
+
+// Basic instruction class constructor template.
+def template BasicMemConstructor {{
+    %(class_name)s::%(class_name)s(ExtMachInst machInst) :
+        %(base_class)s("%(mnemonic)s", machInst, %(op_class)s)
+    {
+        %(set_reg_idx_arr)s;
+        %(constructor)s;
+    }
+}};
+
+def template BasicMemInitiateAcc {{
+    Fault %(class_name)s::initiateAcc(ExecContext * xc,
+            Trace::InstRecord * traceData) const
+    {
+            Fault fault = NoFault;
+
+            %(fp_enable_check)s;
+            %(op_decl)s;
+            %(op_rd)s;
+            %(code)s;
+
+            if(fault == NoFault)
+            {
+                %(op_wb)s;
+            }
+            return fault;
+    }
+}};
+
+def template BasicMemCompleteAcc {{
+    Fault %(class_name)s::completeAcc(PacketPtr pkt, ExecContext *xc,
+            Trace::InstRecord *traceData) const
+    {
+        // Need to figure this out.
+        /*
+        MicroHalt hltObj(machInst, mnemonic, 0x0);
+        if(xc->mwait(pkt)) {
+            hltObj.execute(xc, traceData);
+        }
+        */
+        return NoFault;
+    }
+}};
+
+def format BasicMemInst(code, *opt_flags) {{
+    iop = InstObjParams(name, Name, 'X86ISA::X86StaticInst', code, opt_flags)
+    iop.op_class = 'MemWriteOp'
+    header_output = BasicMemDeclare.subst(iop)
+    decoder_output = BasicMemConstructor.subst(iop)
+    decode_block = BasicDecode.subst(iop)
+    exec_output = BasicExecute.subst(iop)
+    exec_output += BasicMemInitiateAcc.subst(iop)
+    exec_output += BasicMemCompleteAcc.subst(iop)
+}};

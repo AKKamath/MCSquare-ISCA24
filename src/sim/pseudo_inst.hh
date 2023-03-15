@@ -48,6 +48,7 @@
 #include "base/logging.hh"
 #include "base/trace.hh"
 #include "base/types.hh" // For Tick and Addr data types.
+#include "cpu/exec_context.hh"
 #include "cpu/thread_context.hh"
 #include "debug/PseudoInst.hh"
 #include "sim/guest_abi.hh"
@@ -95,7 +96,8 @@ void workend(ThreadContext *tc, uint64_t workid, uint64_t threadid);
 void m5Syscall(ThreadContext *tc);
 void togglesync(ThreadContext *tc);
 void triggerWorkloadEvent(ThreadContext *tc);
-void memcpy_elide(ThreadContext *tc, Addr dest, Addr src, uint64_t len);
+uint64_t memcpy_elide(ThreadContext *tc, ExecContext *xc,
+                      Addr dest, Addr src, uint64_t len);
 
 /**
  * Execute a decoded M5 pseudo instruction
@@ -112,7 +114,8 @@ void memcpy_elide(ThreadContext *tc, Addr dest, Addr src, uint64_t len);
 
 template <typename ABI, bool store_ret>
 bool
-pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
+pseudoInstWork(ThreadContext *tc, uint8_t func,
+               uint64_t &result, ExecContext *xc)
 {
     DPRINTF(PseudoInst, "pseudo_inst::pseudoInst(%i)\n", func);
 
@@ -214,8 +217,8 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
       case M5OP_WORK_END:
         invokeSimcall<ABI>(tc, workend);
         return true;
-      case M5OP_RESERVED2:
-        invokeSimcall<ABI>(tc, memcpy_elide);
+      case M5OP_MC2:
+        result = invokeSimcall<ABI, store_ret>(tc, xc, memcpy_elide);
         return true;
 
       case M5OP_RESERVED1:
@@ -242,17 +245,18 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
 
 template <typename ABI, bool store_ret=false>
 bool
-pseudoInst(ThreadContext *tc, uint8_t func, uint64_t &result)
+pseudoInst(ThreadContext *tc, uint8_t func,
+           uint64_t &result, ExecContext *xc = NULL)
 {
-    return pseudoInstWork<ABI, store_ret>(tc, func, result);
+    return pseudoInstWork<ABI, store_ret>(tc, func, result, xc);
 }
 
 template <typename ABI, bool store_ret=true>
 bool
-pseudoInst(ThreadContext *tc, uint8_t func)
+pseudoInst(ThreadContext *tc, uint8_t func, ExecContext *xc = NULL)
 {
     uint64_t result;
-    return pseudoInstWork<ABI, store_ret>(tc, func, result);
+    return pseudoInstWork<ABI, store_ret>(tc, func, result, xc);
 }
 
 } // namespace pseudo_inst

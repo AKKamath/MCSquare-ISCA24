@@ -30,6 +30,7 @@
 
 #include <functional>
 
+#include "cpu/exec_context.hh"
 #include "sim/guest_abi/definition.hh"
 #include "sim/guest_abi/dispatch.hh"
 #include "sim/guest_abi/layout.hh"
@@ -58,12 +59,33 @@ invokeSimcall(ThreadContext *tc,
         target);
 }
 
+template <typename ABI, bool store_ret, typename Ret, typename ...Args>
+Ret
+invokeSimcall(ThreadContext *tc, ExecContext *xc, std::function<
+              Ret(ThreadContext *, ExecContext *, Args...)> target)
+{
+    // Default construct a State to track consumed resources. Built in
+    // types will be zero initialized.
+    auto state = guest_abi::initializeState<ABI>(tc);
+    guest_abi::prepareForFunction<ABI, Ret, Args...>(tc, state);
+    return guest_abi::callFrom<ABI, Ret, store_ret, Args...>(tc, xc, state,
+        target);
+}
+
 template <typename ABI, typename Ret, typename ...Args>
 Ret
 invokeSimcall(ThreadContext *tc,
               std::function<Ret(ThreadContext *, Args...)> target)
 {
     return invokeSimcall<ABI, true>(tc, target);
+}
+
+template <typename ABI, typename Ret, typename ...Args>
+Ret
+invokeSimcall(ThreadContext *tc, ExecContext *xc, std::function<
+              Ret(ThreadContext *, ExecContext *, Args...)> target)
+{
+    return invokeSimcall<ABI, true>(tc, xc, target);
 }
 
 template <typename ABI, bool store_ret, typename Ret, typename ...Args>
@@ -74,11 +96,28 @@ invokeSimcall(ThreadContext *tc, Ret (*target)(ThreadContext *, Args...))
             tc, std::function<Ret(ThreadContext *, Args...)>(target));
 }
 
+template <typename ABI, bool store_ret, typename Ret, typename ...Args>
+Ret
+invokeSimcall(ThreadContext *tc, ExecContext *xc,
+              Ret (*target)(ThreadContext *, ExecContext *, Args...))
+{
+    return invokeSimcall<ABI, store_ret>(tc, xc,
+        std::function<Ret(ThreadContext *, ExecContext *, Args...)>(target));
+}
+
 template <typename ABI, typename Ret, typename ...Args>
 Ret
 invokeSimcall(ThreadContext *tc, Ret (*target)(ThreadContext *, Args...))
 {
     return invokeSimcall<ABI, true>(tc, target);
+}
+
+template <typename ABI, typename Ret, typename ...Args>
+Ret
+invokeSimcall(ThreadContext *tc, ExecContext *xc,
+              Ret (*target)(ThreadContext *, ExecContext *,  Args...))
+{
+    return invokeSimcall<ABI, true>(tc, xc, target);
 }
 
 template <typename ABI, typename ...Args>
@@ -95,12 +134,32 @@ invokeSimcall(ThreadContext *tc,
 
 template <typename ABI, typename ...Args>
 void
+invokeSimcall(ThreadContext *tc, ExecContext *xc, std::function<
+              void(ThreadContext *, ExecContext *, Args...)> target)
+{
+    // Default construct a State to track consumed resources. Built in
+    // types will be zero initialized.
+    auto state = guest_abi::initializeState<ABI>(tc);
+    guest_abi::prepareForArguments<ABI, Args...>(tc, state);
+    guest_abi::callFrom<ABI, void, false, Args...>(tc, xc, state, target);
+}
+
+template <typename ABI, typename ...Args>
+void
 invokeSimcall(ThreadContext *tc, void (*target)(ThreadContext *, Args...))
 {
     invokeSimcall<ABI>(
             tc, std::function<void(ThreadContext *, Args...)>(target));
 }
 
+template <typename ABI, typename ...Args>
+void
+invokeSimcall(ThreadContext *tc, ExecContext *xc,
+              void (*target)(ThreadContext *, ExecContext *, Args...))
+{
+    invokeSimcall<ABI>(tc, xc,
+        std::function<void(ThreadContext *, ExecContext *, Args...)>(target));
+}
 
 // These functions also wrap a simulator level function. Instead of running the
 // function, they return a string which shows what arguments the function would

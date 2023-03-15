@@ -35,6 +35,7 @@
 #include <utility>
 
 #include "base/compiler.hh"
+#include "cpu/exec_context.hh"
 #include "sim/guest_abi/definition.hh"
 #include "sim/guest_abi/layout.hh"
 
@@ -77,6 +78,26 @@ callFromHelper(Target &target, ThreadContext *tc, State &state, Args &&args,
     return ret;
 }
 
+template <typename ABI, typename Ret, bool store_ret, typename Target,
+         typename State, typename Args, std::size_t... I>
+static inline typename std::enable_if_t<!store_ret, Ret>
+callFromHelper(Target &target, ThreadContext *tc, ExecContext *xc,
+        State &state, Args &&args, std::index_sequence<I...>)
+{
+    return target(tc, xc, std::get<I>(args)...);
+}
+
+template <typename ABI, typename Ret, bool store_ret, typename Target,
+         typename State, typename Args, std::size_t... I>
+static inline typename std::enable_if_t<store_ret, Ret>
+callFromHelper(Target &target, ThreadContext *tc, ExecContext *xc,
+        State &state, Args &&args, std::index_sequence<I...>)
+{
+    Ret ret = target(tc, xc, std::get<I>(args)...);
+    storeResult<ABI, Ret>(tc, ret, state);
+    return ret;
+}
+
 template <typename ABI, typename Ret, bool store_ret, typename ...Args>
 static inline Ret
 callFrom(ThreadContext *tc, typename ABI::State &state,
@@ -89,6 +110,21 @@ callFrom(ThreadContext *tc, typename ABI::State &state,
     // Call the wrapper which will call target.
     return callFromHelper<ABI, Ret, store_ret>(
             target, tc, state, std::move(args),
+            std::make_index_sequence<sizeof...(Args)>{});
+}
+
+template <typename ABI, typename Ret, bool store_ret, typename ...Args>
+static inline Ret
+callFrom(ThreadContext *tc, ExecContext* xc, typename ABI::State &state,
+        std::function<Ret(ThreadContext *, ExecContext*, Args...)> target)
+{
+    // Extract all the arguments from the thread context. Braced initializers
+    // are evaluated from left to right.
+    auto args = std::tuple<Args...>{getArgument<ABI, Args>(tc, state)...};
+
+    // Call the wrapper which will call target.
+    return callFromHelper<ABI, Ret, store_ret>(
+            target, tc, xc, state, std::move(args),
             std::make_index_sequence<sizeof...(Args)>{});
 }
 

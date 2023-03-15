@@ -54,6 +54,7 @@
 #include "base/debug.hh"
 #include "base/output.hh"
 #include "cpu/base.hh"
+#include "cpu/exec_context.hh"
 #include "cpu/thread_context.hh"
 #include "debug/Loader.hh"
 #include "debug/Quiesce.hh"
@@ -484,11 +485,29 @@ triggerWorkloadEvent(ThreadContext *tc)
     tc->getSystemPtr()->workload->event(tc);
 }
 
-void
-memcpy_elide(ThreadContext *tc, Addr dest, Addr src, uint64_t len)
+uint64_t
+memcpy_elide(ThreadContext *tc, ExecContext *xc,
+             Addr dest, Addr src, uint64_t len)
 {
-    DPRINTF(PseudoInst, "pseudo_inst::memcpy_elide(dest = %lx, src = %lx, "
+    DPRINTF(PseudoInst, "pseudo_inst::memcpy_elide(dest = 0x%lx, src = 0x%lx, "
         "len = %ld)\n", dest, src, len);
+    if (!tc->getSystemPtr()->isTimingMode()) {
+        fatal("To exeute memcpy_elide we require the memory system to be in "
+              "'timing' mode.\n");
+    }
+    int data = 32;
+    static const std::vector<bool> byte_enable(sizeof(data), true);
+    Fault f = xc->writeMem((uint8_t*)&data, sizeof(data),
+        src, 0, NULL, byte_enable);
+
+    if (f != NoFault) {
+        printf("In memcpy, Fault: %s\n", f->name());
+        fflush(stdout);
+        Fault *fault_ptr = (Fault *)malloc(sizeof(Fault));
+        *fault_ptr = f;
+        return (uint64_t)fault_ptr;
+    }
+    return 0;
 }
 
 //
