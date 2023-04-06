@@ -81,7 +81,7 @@ def chsFromSize(sizeInBlocks):
     if headSize < 16:
         heads = sizeInBlocks
 
-    cylinders = sizeInBlocks / (sectors * heads)
+    cylinders = sizeInBlocks // (sectors * heads)
 
     return (cylinders, heads, sectors)
 
@@ -351,7 +351,7 @@ newCom = Command(
 
 
 def newImage(file, mb):
-    (cylinders, heads, sectors) = chsFromSize((mb * MB) / BlockSize)
+    (cylinders, heads, sectors) = chsFromSize((mb * MB) // BlockSize)
     size = cylinders * heads * sectors * BlockSize
 
     # We lseek to the end of the file and only write one byte there. This
