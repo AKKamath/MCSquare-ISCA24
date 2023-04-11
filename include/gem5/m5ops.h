@@ -77,8 +77,8 @@ static void memcpy_elide(void* dest, void* src, uint64_t len)
     uint64_t temp_len = (len >> 6) + 1;
     for (int i = 0; i < temp_len; ++i)
     {
-        _mm_clflush( (void*)((uint64_t)temp_dest + (i << 6)) );
-        _mm_clflush( (void*)((uint64_t)temp_src + (i << 6)) );
+        _mm_clflushopt( (void*)((uint64_t)temp_dest + (i << 6)) );
+        _mm_clflushopt( (void*)((uint64_t)temp_src + (i << 6)) );
     }
     m5_memcpy_elide(dest, src, len);
 }
