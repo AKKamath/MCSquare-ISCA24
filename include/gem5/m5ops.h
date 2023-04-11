@@ -69,7 +69,7 @@ void m5_work_begin(uint64_t workid, uint64_t threadid);
 void m5_work_end(uint64_t workid, uint64_t threadid);
 void m5_memcpy_elide(void* dest, void* src, uint64_t len);
 
-void memcpy_elide(void* dest, void* src, uint64_t len)
+static void memcpy_elide(void* dest, void* src, uint64_t len)
 {
     _mm_mfence();
     void *temp_dest = (void*)((uint64_t)dest & ~((uint64_t)63));
