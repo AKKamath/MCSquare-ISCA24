@@ -495,10 +495,8 @@ memcpy_elide(ThreadContext *tc, ExecContext *xc,
         fatal("To exeute memcpy_elide we require the memory system to be in "
               "'timing' mode.\n");
     }
-    int data = 32;
-    static const std::vector<bool> byte_enable(sizeof(data), true);
-    Fault f = xc->writeMem((uint8_t*)&data, sizeof(data),
-        src, 0, NULL, byte_enable);
+    Fault f = xc->writeMem((uint8_t*)src, len,
+        dest, Request::MEM_ELIDE, NULL, std::vector<bool>(len, true));
 
     if (f != NoFault) {
         printf("In memcpy, Fault: %s\n", f->name());
