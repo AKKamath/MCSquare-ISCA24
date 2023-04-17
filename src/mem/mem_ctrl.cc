@@ -419,6 +419,31 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
     }
     prevArrival = curTick();
 
+    if(pkt->req->getFlags() & Request::MEM_ELIDE) {
+        printf("Added entry: dest - %lx, src - %lx, size - %u, response = %d\n", pkt->getAddr(), 
+            pkt->req->_paddr_src, pkt->req->getSize(), pkt->needsResponse());
+        mcsq_table.push_back(mcsq_table_entry(pkt->getAddr(), 
+            pkt->req->_paddr_src, pkt->req->getSize()));
+        // turn packet around to go back to requestor if response expected
+        if (pkt->needsResponse()) {
+            pkt->makeResponse();
+            // response_time consumes the static latency and is charged also
+            // with headerDelay that takes into account the delay provided by
+            // the xbar
+            Tick response_time = curTick() + frontendLatency + pkt->headerDelay;
+            // Here we reset the timing of the packet before sending it out.
+            pkt->headerDelay = pkt->payloadDelay = 0;
+            // queue the packet in the response queue to be sent out after
+            // the static latency has passed
+            port.schedTimingResp(pkt, response_time);
+        } else {
+            // @todo the packet is going to be deleted, and the MemPacket
+            // is still having a pointer to it
+            pendingDelete.reset(pkt);
+        }
+        return true;
+    }
+
     panic_if(!(dram->getAddrRange().contains(pkt->getAddr())),
              "Can't handle address range for packet %s\n", pkt->print());
 

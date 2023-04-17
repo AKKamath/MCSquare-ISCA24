@@ -101,6 +101,9 @@ class Request
     typedef uint8_t ArchFlagsType;
     typedef gem5::Flags<FlagsType> Flags;
 
+    Addr _vaddr_src = MaxAddr;
+    Addr _paddr_src = 0;
+
     enum : FlagsType
     {
         /**
@@ -133,6 +136,10 @@ class Request
          * the UNCACHEABLE flag is set as well.
          */
         STRICT_ORDER                = 0x00000800,
+        /**
+         * Used for memcpy elision
+        */
+        MEM_ELIDE                   = 0x00002000,
         /** This request is made in privileged mode. */
         PRIVILEGED                  = 0x00008000,
 
@@ -597,6 +604,16 @@ class Request
     {
         _paddr = paddr;
         privateFlags.set(VALID_PADDR);
+    }
+
+    /**
+     * Set just the physical address. This usually used to record the
+     * result of a translation.
+     */
+    void
+    setVaddr(Addr vaddr)
+    {
+        _vaddr = vaddr;
     }
 
     /**
