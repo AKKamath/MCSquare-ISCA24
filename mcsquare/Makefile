@@ -1,7 +1,7 @@
 .PHONY: mount_img umount_img compile_gem5 launch_gem5
 
 GEM5_IMG ?= ./mcsquare-18.04.img
-GEM5_CPU ?= O3CPU#TimingSimpleCPU # #X86KvmCPU
+GEM5_CPU ?= O3CPU #TimingSimpleCPU # #X86KvmCPU
 GEM5_KERNEL ?= ./vmlinux-4.19.83
 GEM5_SCRIPT ?= ./scripts/run-script_copy.sh #./scripts/copy_sweep.sh
 
@@ -28,7 +28,8 @@ compile_gem5:
 launch_gem5:
 	sudo ls; \
 	$(MAKE) compile_gem5; \
-	sudo ../build/X86/gem5.opt --debug-flags=PseudoInst -d ./results/ ./fs.py  --fast-forward=1000000000000000000 --mem-size=8GB --cpu-type=${GEM5_CPU} --kernel=${GEM5_KERNEL} --disk-image=${GEM5_IMG} -n 1 --script=${GEM5_SCRIPT} --ruby
+	echo "run\nbt\n" > run.sh; \
+	sudo ../build/X86/gem5.opt --debug-flags=PseudoInst -d ./results/ ./fs.py  --fast-forward=1000000000000000000 --mem-size=8GB --cpu-type=${GEM5_CPU} --kernel=${GEM5_KERNEL} --disk-image=${GEM5_IMG} -n 1 --script=${GEM5_SCRIPT} --caches --l2cache > fullout
 	grep -e "switch_cpus.numCycles" results/stats.txt
 
 copy_sweep: copy_sweep.cpp

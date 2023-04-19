@@ -1,13 +1,13 @@
 #!/bin/bash
 
-THREADS=4
-TIMEOUT=10
+THREADS=2
+TIMEOUT=0.01
 ZIO=/home/akkamath/zIO
 ZIO_BIN=../../tas/lib/copy_interpose.so
-BYTE_LIST="524288"
+BYTE_LIST="4096"
 
 #This is the copy_sweep directory
-cd ../benchmarks/micro_rpc_cpy
+cd ${ZIO}/benchmarks/micro_rpc_cpy
 make
 mkdir -p results/copy_sweep/;
 
@@ -16,7 +16,7 @@ rm results/copy_sweep/*.dat
 
 #Perform the Linux experiments first
 echo "Linux Runs"
-
+m5 exit
 #This is how we run the microbenchmark. 
 #The first command line option is the number of threads. The second is the bytes. The third is time.
 for BYTES in ${BYTE_LIST}; do
@@ -40,3 +40,4 @@ cat final.dat
 rm final.dat
 '
 tail -n 6 results/copy_sweep/*
+m5 exit
