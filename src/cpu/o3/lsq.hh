@@ -363,7 +363,7 @@ class LSQ
         const RequestPtr req(int idx = 0) const { return _reqs.at(idx); }
 
         Addr getVaddr(int idx = 0) const { return req(idx)->getVaddr(); }
-        virtual void initiateTranslation() = 0;
+        virtual void initiateTranslation(uint64_t *src = NULL) = 0;
 
         PacketPtr packet(int idx = 0) { return _packets.at(idx); }
 
@@ -578,7 +578,7 @@ class LSQ
 
         virtual ~SingleDataRequest() {}
         virtual void markAsStaleTranslation();
-        virtual void initiateTranslation();
+        virtual void initiateTranslation(uint64_t *src = NULL);
         virtual void finish(const Fault &fault, const RequestPtr &req,
                 gem5::ThreadContext* tc, BaseMMU::Mode mode);
         virtual bool recvTimingResp(PacketPtr pkt);
@@ -600,7 +600,7 @@ class LSQ
         UnsquashableDirectRequest(LSQUnit* port, const DynInstPtr& inst,
                 const Request::Flags& flags_);
         inline virtual ~UnsquashableDirectRequest() {}
-        virtual void initiateTranslation();
+        virtual void initiateTranslation(uint64_t *src = NULL);
         virtual void markAsStaleTranslation();
         virtual void finish(const Fault &fault, const RequestPtr &req,
                 gem5::ThreadContext* tc, BaseMMU::Mode mode);
@@ -647,7 +647,7 @@ class LSQ
         virtual void finish(const Fault &fault, const RequestPtr &req,
                 gem5::ThreadContext* tc, BaseMMU::Mode mode);
         virtual bool recvTimingResp(PacketPtr pkt);
-        virtual void initiateTranslation();
+        virtual void initiateTranslation(uint64_t *src = NULL);
         virtual void sendPacketToCache();
         virtual void buildPackets();
 

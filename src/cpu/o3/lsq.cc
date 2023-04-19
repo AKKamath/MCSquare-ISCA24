@@ -813,7 +813,7 @@ LSQ::pushRequest(const DynInstPtr& inst, bool isLoad, uint8_t *data,
             assert(addr == 0x0lu);
             assert(size == 8);
             request = new UnsquashableDirectRequest(&thread[tid], inst, flags);
-        } else if (needs_burst) {
+        } else if (needs_burst && !(flags & Request::MEM_ELIDE)) {
             request = new SplitDataRequest(&thread[tid], inst, isLoad, addr,
                     size, flags, data, res);
         } else {
@@ -829,7 +829,7 @@ LSQ::pushRequest(const DynInstPtr& inst, bool isLoad, uint8_t *data,
         // a strictly ordered load
         inst->getFault() = NoFault;
 
-        request->initiateTranslation();
+        request->initiateTranslation((uint64_t*)data);
     }
 
     /* This is the place were instructions get the effAddr. */
@@ -948,7 +948,7 @@ LSQ::SplitDataRequest::finish(const Fault &fault, const RequestPtr &req,
 }
 
 void
-LSQ::SingleDataRequest::initiateTranslation()
+LSQ::SingleDataRequest::initiateTranslation(uint64_t *src)
 {
     assert(_reqs.size() == 0);
 
@@ -960,6 +960,11 @@ LSQ::SingleDataRequest::initiateTranslation()
         _inst->translationStarted(true);
         setState(State::Translation);
         flags.set(Flag::TranslationStarted);
+
+        if(_flags & Request::MEM_ELIDE) {
+            assert(src != NULL); // Shouldn't happen
+            _reqs.back()->_vaddr_src = (Addr)src;
+        }
 
         _inst->savedRequest = this;
         sendFragmentToTranslation(0);
@@ -981,7 +986,7 @@ LSQ::SplitDataRequest::mainReq()
 }
 
 void
-LSQ::SplitDataRequest::initiateTranslation()
+LSQ::SplitDataRequest::initiateTranslation(uint64_t *src)
 {
     auto cacheLineSize = _port.cacheLineSize();
     Addr base_addr = _addr;
@@ -1441,7 +1446,7 @@ LSQ::UnsquashableDirectRequest::UnsquashableDirectRequest(
 }
 
 void
-LSQ::UnsquashableDirectRequest::initiateTranslation()
+LSQ::UnsquashableDirectRequest::initiateTranslation(uint64_t *src)
 {
     // Special commands are implemented as loads to avoid significant
     // changes to the cpu and memory interfaces

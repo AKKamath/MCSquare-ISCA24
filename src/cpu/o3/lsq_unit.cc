@@ -1618,6 +1618,7 @@ LSQUnit::write(LSQRequest *request, uint8_t *data, ssize_t store_idx)
 
     // copy data into the storeQueue only if the store request has valid data
     if (!(request->req()->getFlags() & Request::CACHE_BLOCK_ZERO) &&
+        !(request->req()->getFlags() & Request::MEM_ELIDE) &&
         !request->req()->isCacheMaintenance() &&
         !request->req()->isAtomic())
         memcpy(storeQueue[store_idx].data(), data, size);
