@@ -32,3 +32,9 @@ configs/example/memcheck.cfg
 configs/dram/lowp_sweep.cfg
 .pyenv
 .vscode
+.pyeni
+**/results/
+**.txt
+**.iso
+**.img
+**vmlinux**
