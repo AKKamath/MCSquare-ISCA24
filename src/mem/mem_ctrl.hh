@@ -59,6 +59,7 @@
 #include "mem/qport.hh"
 #include "params/MemCtrl.hh"
 #include "sim/eventq.hh"
+#include "mcsquare.h"
 
 namespace gem5
 {
@@ -779,6 +780,8 @@ class MemCtrl : public qos::MemCtrl
     virtual void startup() override;
     virtual void drainResume() override;
 
+    MCSquare mcsquare;
+
   protected:
 
     virtual Tick recvAtomic(PacketPtr pkt);
@@ -788,24 +791,6 @@ class MemCtrl : public qos::MemCtrl
 
     bool recvFunctionalLogic(PacketPtr pkt, MemInterface* mem_intr);
     Tick recvAtomicLogic(PacketPtr pkt, MemInterface* mem_intr);
-
-    struct mcsq_table_entry {
-      Addr dest;
-      Addr src;
-      uint64_t size;
-      uint32_t access_ctr;
-
-      mcsq_table_entry() {}
-      mcsq_table_entry(Addr dest, Addr src, uint64_t size) {
-        this->dest = dest;
-        this->src = src;
-        this->size = size;
-        this->access_ctr = 0;
-      }
-    };
-
-    std::vector<mcsq_table_entry> mcsq_table;
-
 };
 
 } // namespace memory

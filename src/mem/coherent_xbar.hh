@@ -52,6 +52,7 @@
 #include "mem/snoop_filter.hh"
 #include "mem/xbar.hh"
 #include "params/CoherentXBar.hh"
+#include "mcsquare.h"
 
 namespace gem5
 {

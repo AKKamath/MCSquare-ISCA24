@@ -419,13 +419,20 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
     }
     prevArrival = curTick();
 
-    if(pkt->req->getFlags() & Request::MEM_ELIDE) {
-        printf("Added entry: dest - %lx, src - %lx, size - %u, response = %d\n", pkt->getAddr(), 
-            pkt->req->_paddr_src, pkt->req->getSize(), pkt->needsResponse());
-        mcsq_table.push_back(mcsq_table_entry(pkt->getAddr(), 
-            pkt->req->_paddr_src, pkt->req->getSize()));
+    if(isMCSquare(pkt)) {
+        mcsquare.insertEntry(pkt->getAddr(), 
+            pkt->req->_paddr_src, pkt->req->getSize());
+        // See if we're responsible for sending a response back
+        bool weContain = false;
+        AddrRangeList addrList = getAddrRanges();
+        for(auto i = addrList.begin(); i != addrList.end(); ++i)
+            if(i->contains(pkt->getAddr())) {
+                weContain = true;
+                break;
+            }
         // turn packet around to go back to requestor if response expected
-        if (pkt->needsResponse()) {
+        // Only the memctrl that owns the packet will send.
+        if (pkt->needsResponse() && weContain) {
             pkt->makeResponse();
             // response_time consumes the static latency and is charged also
             // with headerDelay that takes into account the delay provided by
@@ -436,12 +443,24 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
             // queue the packet in the response queue to be sent out after
             // the static latency has passed
             port.schedTimingResp(pkt, response_time);
-        } else {
+        } else if(weContain) {
             // @todo the packet is going to be deleted, and the MemPacket
             // is still having a pointer to it
             pendingDelete.reset(pkt);
         }
         return true;
+    }
+
+    if(MCSquare::Types type = mcsquare.contains(pkt)) {
+        printf("Found an elided access packet!\n");
+        // TODO: Atomic
+        if(pkt->isWrite()) {
+            // Read from dest will be taken care of when responding.
+            // We need to only handle writes to src/dest here
+            // TODO: Write to src, write to dest
+            if(type == MCSquare::Types::TYPE_DEST)
+                mcsquare.splitEntry(pkt->getAddr(), pkt->getSize());
+        }
     }
 
     panic_if(!(dram->getAddrRange().contains(pkt->getAddr())),
@@ -649,6 +668,18 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
     panic_if(!mem_intr->getAddrRange().contains(pkt->getAddr()),
              "Can't handle address range for packet %s\n", pkt->print());
     mem_intr->access(pkt);
+
+    if(pkt->isRead() && mcsquare.contains(pkt) == MCSquare::Types::TYPE_DEST) {
+        // Add redirect flag to redirect
+        printf("Setting redirect packet! %p\n", pkt->getAddr());
+        pkt->req->setFlags(Request::MEM_ELIDE_REDIRECT_SRC);
+    } else if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
+        // We have read the appropriate data. Clear flag.
+        // TODO: Src lies across multiple cachelines, prepare next src cacheline
+        printf("Clearing redirect packet! %p\n", pkt->getAddr());
+        pkt->req->clearFlags(Request::MEM_ELIDE_REDIRECT_SRC);
+        pkt->setAddr(pkt->req->_paddr_dest);
+    }
 
     // turn packet around to go back to requestor if response expected
     if (needsResponse) {

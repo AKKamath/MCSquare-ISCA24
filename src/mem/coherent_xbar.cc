@@ -160,6 +160,16 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
 
     // determine the destination based on the destination address range
     PortID mem_side_port_id = findPort(pkt->getAddrRange());
+    // If MCSquare, then port will not be found for multi-channel setups.
+    // Manually find an appropriate port for such a case
+    if(isMCSquare(pkt)) {
+        for(auto i = portMap.begin(); i != portMap.end(); ++i) {
+            if(i->first.contains(pkt->getAddr())) {
+                mem_side_port_id = i->second;
+                break;
+            }
+        }
+    }
 
     // test if the crossbar should be considered occupied for the current
     // port, and exclude express snoops from the check
@@ -289,6 +299,14 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
                 pkt->clearWriteThrough();
             }
 
+            // Forward MCSquare packets to all memctrls
+            if(isMCSquare(pkt)) {
+                for(auto i = portMap.begin(); i != portMap.end(); ++i) {
+                    if(pkt->getAddrRange().isSubset(AddrRange(i->first.start(), i->first.end())))
+                        if(i->second != mem_side_port_id)
+                            memSidePorts[i->second]->sendTimingReq(pkt);
+                }
+            }
             // since it is a normal request, attempt to send the packet
             success = memSidePorts[mem_side_port_id]->sendTimingReq(pkt);
         } else {
@@ -455,6 +473,14 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     const PortID cpu_side_port_id = route_lookup->second;
     assert(cpu_side_port_id != InvalidPortID);
     assert(cpu_side_port_id < respLayers.size());
+
+    if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC && pkt->isRead()) {
+        printf("Got redirect packet! %p\n", pkt->getAddr());
+        pkt->setAddr(pkt->req->_paddr_src); // TODO: Src lies in multiple cachelines
+        pkt->cmd = pkt->makeReadCmd(pkt->req);
+        routeTo.erase(route_lookup);
+        return recvTimingReq(pkt, cpu_side_port_id);
+    }
 
     // test if the crossbar should be considered occupied for the
     // current port
