@@ -5,7 +5,7 @@
 #include <string>
 #include <unordered_set>
 #include <utility>
-#include <vector>
+#include <list>
 
 #include "base/callback.hh"
 #include "base/statistics.hh"
@@ -45,7 +45,7 @@ class MCSquare {
       }
     };
 
-    std::vector<TableEntry> m_table;
+    std::list<TableEntry> m_table;
 
   public:
     enum Types {
@@ -55,6 +55,7 @@ class MCSquare {
     };
 
     void insertEntry(Addr dest, Addr src, uint64_t size);
+    void deleteEntry(Addr dest, uint64_t size);
     void splitEntry(Addr splitAddr, uint64_t size);
     Types contains(PacketPtr pkt);
 };

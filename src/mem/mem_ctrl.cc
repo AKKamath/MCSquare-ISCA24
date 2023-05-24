@@ -420,8 +420,11 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
     prevArrival = curTick();
 
     if(isMCSquare(pkt)) {
-        mcsquare.insertEntry(pkt->getAddr(), 
-            pkt->req->_paddr_src, pkt->req->getSize());
+        if(pkt->req->getFlags() & Request::MEM_ELIDE)
+            mcsquare.insertEntry(pkt->getAddr(), 
+                pkt->req->_paddr_src, pkt->req->getSize());
+        else if(pkt->req->getFlags() & Request::MEM_ELIDE_FREE)
+            mcsquare.deleteEntry(pkt->getAddr(), pkt->req->getSize());
         // See if we're responsible for sending a response back
         bool weContain = false;
         AddrRangeList addrList = getAddrRanges();
@@ -671,12 +674,12 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
 
     if(pkt->isRead() && mcsquare.contains(pkt) == MCSquare::Types::TYPE_DEST) {
         // Add redirect flag to redirect
-        printf("Setting redirect packet! %p\n", pkt->getAddr());
+        printf("Setting redirect packet! %x %x\n", pkt->req->_paddr_dest, pkt->req->_paddr_src);
         pkt->req->setFlags(Request::MEM_ELIDE_REDIRECT_SRC);
     } else if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
         // We have read the appropriate data. Clear flag.
         // TODO: Src lies across multiple cachelines, prepare next src cacheline
-        printf("Clearing redirect packet! %p\n", pkt->getAddr());
+        printf("Clearing redirect packet! %x %x\n", pkt->req->_paddr_dest, pkt->req->_paddr_src);
         pkt->req->clearFlags(Request::MEM_ELIDE_REDIRECT_SRC);
         pkt->setAddr(pkt->req->_paddr_dest);
     }

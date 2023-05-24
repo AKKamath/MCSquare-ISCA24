@@ -61,6 +61,7 @@
 #include "mem/cache/tags/base.hh"
 #include "mem/cache/write_queue_entry.hh"
 #include "mem/request.hh"
+#include "mem/mcsquare.h"
 #include "params/Cache.hh"
 
 namespace gem5
@@ -327,8 +328,7 @@ Cache::handleTimingReqMiss(PacketPtr pkt, CacheBlk *blk, Tick forward_time,
 
     // These should always hit due to the earlier Locked Read
     assert(pkt->cmd != MemCmd::LockedRMWWriteReq);
-    if (pkt->req->isUncacheable() || 
-        pkt->req->getFlags() & Request::MEM_ELIDE) {
+    if (pkt->req->isUncacheable() || isMCSquare(pkt)) {
         // ignore any existing MSHR if we are dealing with an
         // uncacheable request
 

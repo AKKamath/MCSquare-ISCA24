@@ -59,6 +59,7 @@
 #include "mem/cache/queue_entry.hh"
 #include "mem/cache/tags/compressed_tags.hh"
 #include "mem/cache/tags/super_blk.hh"
+#include "mem/mcsquare.h"
 #include "params/BaseCache.hh"
 #include "params/WriteAllocator.hh"
 #include "sim/cur_tick.hh"
@@ -306,8 +307,8 @@ BaseCache::handleTimingReqMiss(PacketPtr pkt, MSHR *mshr, CacheBlk *blk,
                                Tick forward_time, Tick request_time)
 {
     if (writeAllocator &&
-        pkt && pkt->isWrite() && !pkt->req->isUncacheable() &&
-        !(pkt->req->getFlags() & Request::MEM_ELIDE)) {
+        pkt && pkt->isWrite() && !pkt->req->isUncacheable() && 
+        !(isMCSquare(pkt))) {
         writeAllocator->updateMode(pkt->getAddr(), pkt->getSize(),
                                    pkt->getBlockAddr(blkSize));
     }
@@ -508,7 +509,7 @@ BaseCache::recvTimingResp(PacketPtr pkt)
     // write
     if (pkt->isWrite() && pkt->cmd != MemCmd::LockedRMWWriteResp) {
         assert(pkt->req->isUncacheable() || 
-               pkt->req->getFlags() & Request::MEM_ELIDE);
+               isMCSquare(pkt));
         handleUncacheableWriteResp(pkt);
         return;
     }

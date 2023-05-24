@@ -140,7 +140,8 @@ class Request
         /**
          * Used for memcpy elision
         */
-        MEM_ELIDE                   = 0x00002000,
+        MEM_ELIDE                   = 0x00001000,
+        MEM_ELIDE_FREE              = 0x00002000,
         MEM_ELIDE_REDIRECT_SRC      = 0x00004000,
         /** This request is made in privileged mode. */
         PRIVILEGED                  = 0x00008000,

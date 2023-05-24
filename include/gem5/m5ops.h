@@ -68,20 +68,7 @@ void m5_panic(void);
 void m5_work_begin(uint64_t workid, uint64_t threadid);
 void m5_work_end(uint64_t workid, uint64_t threadid);
 void m5_memcpy_elide(void* dest, void* src, uint64_t len);
-
-static void memcpy_elide(void* dest, void* src, uint64_t len)
-{
-    _mm_mfence();
-    void *temp_dest = (void*)((uint64_t)dest & ~((uint64_t)63));
-    void *temp_src = (void*)((uint64_t)src & ~((uint64_t)63));
-    uint64_t temp_len = (len >> 6) + 1;
-    for (int i = 0; i < temp_len; ++i)
-    {
-        _mm_clflushopt( (void*)((uint64_t)temp_dest + (i << 6)) );
-        _mm_clflushopt( (void*)((uint64_t)temp_src + (i << 6)) );
-    }
-    m5_memcpy_elide(dest, src, len);
-}
+void m5_memcpy_elide_free(void* dest, uint64_t len);
 
 /*
  * Send a very generic poke to the workload so it can do something. It's up to

@@ -53,6 +53,7 @@
 #include "mem/packet_access.hh"
 #include "mem/page_table.hh"
 #include "mem/request.hh"
+#include "mem/mcsquare.h"
 #include "sim/full_system.hh"
 #include "sim/process.hh"
 #include "sim/pseudo_inst.hh"
@@ -559,6 +560,9 @@ TLB::translateTiming(const RequestPtr &req, ThreadContext *tc,
         req->setVaddr(req->_vaddr_src);
         Fault fault =
             TLB::translate(req, tc, translation, mode, delayedResponse, true);
+        if(delayedResponse || fault != NoFault) {
+            printf("MC2: Tried translating %lx but failed\n", req->getVaddr());
+        }
         assert(delayedResponse == false); // If not, no idea what to do here.
         assert(fault == NoFault);         // Figure this out when it happens
         // Store translated pAddr of source, and set vAddr back to that of destination

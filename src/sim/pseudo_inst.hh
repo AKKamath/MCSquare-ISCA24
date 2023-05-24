@@ -98,6 +98,8 @@ void togglesync(ThreadContext *tc);
 void triggerWorkloadEvent(ThreadContext *tc);
 uint64_t memcpy_elide(ThreadContext *tc, ExecContext *xc,
                       Addr dest, Addr src, uint64_t len);
+uint64_t memcpy_elide_free(ThreadContext *tc, ExecContext *xc,
+                      Addr dest, Addr src, uint64_t len);
 
 /**
  * Execute a decoded M5 pseudo instruction
@@ -220,9 +222,11 @@ pseudoInstWork(ThreadContext *tc, uint8_t func,
       case M5OP_MC2:
         result = invokeSimcall<ABI, store_ret>(tc, xc, memcpy_elide);
         return true;
+      case M5OP_MCFREE:
+        result = invokeSimcall<ABI, store_ret>(tc, xc, memcpy_elide_free);
+        return true;
 
       case M5OP_RESERVED1:
-      case M5OP_RESERVED3:
       case M5OP_RESERVED4:
       case M5OP_RESERVED5:
         warn("Unimplemented m5 op (%#x)\n", func);

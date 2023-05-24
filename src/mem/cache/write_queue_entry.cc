@@ -53,6 +53,7 @@
 #include "base/types.hh"
 #include "mem/cache/base.hh"
 #include "mem/request.hh"
+#include "mem/mcsquare.h"
 
 namespace gem5
 {
@@ -106,7 +107,7 @@ WriteQueueEntry::allocate(Addr blk_addr, unsigned blk_size, PacketPtr target,
              "cacheable target", blkAddr);
     panic_if(!((target->isWrite() && _isUncacheable) ||
                (target->isEviction() && !_isUncacheable) ||
-               (target->req->getFlags() & Request::MEM_ELIDE) ||
+               (isMCSquare(target->req)) ||
                target->cmd == MemCmd::WriteClean),
              "Write queue entry %#llx should be an uncacheable write or "
              "a cacheable eviction or a writeclean");

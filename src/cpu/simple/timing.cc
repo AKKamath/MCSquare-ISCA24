@@ -534,7 +534,7 @@ TimingSimpleCPU::writeMem(uint8_t *data, unsigned size,
     unsigned block_size = cacheLineSize();
     BaseMMU::Mode mode = BaseMMU::Write;
 
-    if(!(flags & Request::MEM_ELIDE)) {
+    if(!(flags & Request::MEM_ELIDE || flags & Request::MEM_ELIDE_FREE)) {
         if (data == NULL) {
             assert(flags & Request::STORE_NO_DATA);
             // This must be a cache block cleaning request
@@ -553,7 +553,7 @@ TimingSimpleCPU::writeMem(uint8_t *data, unsigned size,
 
     req->taskId(taskId());
 
-    if(flags & Request::MEM_ELIDE) {
+    if(flags & Request::MEM_ELIDE || flags & Request::MEM_ELIDE_FREE) {
         WholeTranslationState *state =
             new WholeTranslationState(req, newData, res, mode);
         DataTranslation<TimingSimpleCPU *> *translation =

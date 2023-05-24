@@ -813,7 +813,8 @@ LSQ::pushRequest(const DynInstPtr& inst, bool isLoad, uint8_t *data,
             assert(addr == 0x0lu);
             assert(size == 8);
             request = new UnsquashableDirectRequest(&thread[tid], inst, flags);
-        } else if (needs_burst && !(flags & Request::MEM_ELIDE)) {
+        } else if (needs_burst && !(flags & Request::MEM_ELIDE 
+                                    || flags & Request::MEM_ELIDE_FREE)) {
             request = new SplitDataRequest(&thread[tid], inst, isLoad, addr,
                     size, flags, data, res);
         } else {
