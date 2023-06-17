@@ -4,13 +4,13 @@
 namespace gem5
 {
 
-bool isMCSquare(RequestPtr req)
+bool isMCSquare(const RequestPtr req)
 {
     return req->getFlags() & Request::MEM_ELIDE ||
            req->getFlags() & Request::MEM_ELIDE_FREE;
 }
 
-bool isMCSquare(PacketPtr pkt)
+bool isMCSquare(const gem5::Packet* pkt)
 {
   return isMCSquare(pkt->req);
 }
@@ -45,16 +45,21 @@ MCSquare::insertEntry(Addr dest, Addr src, uint64_t size)
 
     m_table.push_back(TableEntry(dest, src, size));
     printf("Added: dest - %lx, src - %lx, size - %lu\n", dest, src, size);
-    printf("Now contains: \n");
+    /*printf("Now contains: \n");
     for(auto i = m_table.begin(); i != m_table.end(); ++i) {
         printf("Src: %lx - %lx, dest %lx - %lx\t", i->src, i->src + i->size, i->dest, i->dest + i->size);
     }
-    printf("\n");
+    printf("\n");*/
 }
 
 void
 MCSquare::deleteEntry(Addr dest, uint64_t size)
 {
+    if(size == (uint64_t)1) {
+        printf("Clearing elision table\n");
+        m_table.clear();
+        return;
+    }
     /*
      * TODO:
      * 1) Split entry if doesn't cover entire entry
@@ -87,13 +92,11 @@ MCSquare::contains(PacketPtr pkt)
     // TODO: Add dest/src info to packet header.
     for(auto i = m_table.begin(); i != m_table.end(); ++i) {
         if(pkt->getAddrRange().intersects(RangeSize(i->src, i->size))) {
-            printf("Intersects src %lx\n", pkt->getAddr());
             pkt->req->_paddr_dest = i->dest + (pkt->getAddr() - i->src);
             pkt->req->_paddr_src = pkt->getAddr();
             return Types::TYPE_SRC;
         }
         if(pkt->getAddrRange().intersects(RangeSize(i->dest, i->size))) {
-            printf("Intersects dest %lx\n", pkt->getAddr());
             pkt->req->_paddr_dest = pkt->getAddr();
             pkt->req->_paddr_src = i->src + (pkt->getAddr() - i->dest);
             return Types::TYPE_DEST;

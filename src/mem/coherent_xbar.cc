@@ -207,7 +207,8 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
     const bool is_destination = isDestination(pkt);
 
     const bool snoop_caches = !system->bypassCaches() &&
-        pkt->cmd != MemCmd::WriteClean;
+        pkt->cmd != MemCmd::WriteClean &&
+        !isMCSquare(pkt);
     if (snoop_caches) {
         assert(pkt->snoopDelay == 0);
 
@@ -475,7 +476,7 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     assert(cpu_side_port_id < respLayers.size());
 
     if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC && pkt->isRead()) {
-        printf("Got redirect packet! %p\n", pkt->getAddr());
+        printf("Got redirect packet! %lx\n", pkt->getAddr());
         pkt->setAddr(pkt->req->_paddr_src); // TODO: Src lies in multiple cachelines
         pkt->cmd = pkt->makeReadCmd(pkt->req);
         routeTo.erase(route_lookup);

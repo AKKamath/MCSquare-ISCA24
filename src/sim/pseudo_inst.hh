@@ -99,7 +99,7 @@ void triggerWorkloadEvent(ThreadContext *tc);
 uint64_t memcpy_elide(ThreadContext *tc, ExecContext *xc,
                       Addr dest, Addr src, uint64_t len);
 uint64_t memcpy_elide_free(ThreadContext *tc, ExecContext *xc,
-                      Addr dest, Addr src, uint64_t len);
+                      Addr dest, uint64_t len);
 
 /**
  * Execute a decoded M5 pseudo instruction

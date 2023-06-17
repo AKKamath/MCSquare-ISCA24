@@ -455,14 +455,15 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
     }
 
     if(MCSquare::Types type = mcsquare.contains(pkt)) {
-        printf("Found an elided access packet!\n");
         // TODO: Atomic
         if(pkt->isWrite()) {
             // Read from dest will be taken care of when responding.
             // We need to only handle writes to src/dest here
             // TODO: Write to src, write to dest
-            if(type == MCSquare::Types::TYPE_DEST)
+            if(type == MCSquare::Types::TYPE_DEST) {
                 mcsquare.splitEntry(pkt->getAddr(), pkt->getSize());
+                printf("Found a write to dest %lx!\n", pkt->getAddr());
+            }
         }
     }
 
@@ -674,12 +675,12 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
 
     if(pkt->isRead() && mcsquare.contains(pkt) == MCSquare::Types::TYPE_DEST) {
         // Add redirect flag to redirect
-        printf("Setting redirect packet! %x %x\n", pkt->req->_paddr_dest, pkt->req->_paddr_src);
+        printf("Setting redirect packet! %lx %lx\n", pkt->req->_paddr_dest, pkt->req->_paddr_src);
         pkt->req->setFlags(Request::MEM_ELIDE_REDIRECT_SRC);
     } else if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
         // We have read the appropriate data. Clear flag.
         // TODO: Src lies across multiple cachelines, prepare next src cacheline
-        printf("Clearing redirect packet! %x %x\n", pkt->req->_paddr_dest, pkt->req->_paddr_src);
+        printf("Clearing redirect packet! %lx %lx\n", pkt->req->_paddr_dest, pkt->req->_paddr_src);
         pkt->req->clearFlags(Request::MEM_ELIDE_REDIRECT_SRC);
         pkt->setAddr(pkt->req->_paddr_dest);
     }

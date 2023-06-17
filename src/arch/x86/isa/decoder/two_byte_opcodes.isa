@@ -159,7 +159,7 @@
             0x4: BasicMemInst::gem5Op({{
                 uint64_t result;
                 bool recognized = true;
-                if(IMMEDIATE != M5OP_MC2) {
+                if(IMMEDIATE != M5OP_MC2 && IMMEDIATE != M5OP_MCFREE) {
                     recognized = pseudo_inst::pseudoInst<X86PseudoInstABI>(
                         xc->tcBase(), IMMEDIATE, result, xc);
                     if (!recognized)

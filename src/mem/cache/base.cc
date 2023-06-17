@@ -1245,21 +1245,23 @@ BaseCache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
     DPRINTF(Cache, "%s for %s %s\n", __func__, pkt->print(),
             blk ? "hit " + blk->print() : "miss");
 
-    // If MEM_ELIDE operation, invalidate all entries
+    // If MCSquare operation, invalidate entries
     // If used properly, this should have been preceeded by a flush op,
     // so we don't have to worry about the data
-    if(pkt->req->getFlags() & Request::MEM_ELIDE) {
+    if(isMCSquare(pkt->req)) {
         // Invalidate destination addresses
         for(int i = 0; i < pkt->req->getSize(); i += blkSize) {
             CacheBlk *blk = tags->findBlock(pkt->getAddr() + i, pkt->isSecure());
             if(blk)
                 invalidateBlock(blk);
         }
-        // Invalidate source addresses
-        for(int i = 0; i < pkt->req->getSize(); i += blkSize) {
-            CacheBlk *blk = tags->findBlock(pkt->req->_paddr_src + i, pkt->isSecure());
-            if(blk)
-                invalidateBlock(blk);
+        // Invalidate source only for MEM_ELIDE
+        if(pkt->req->getFlags() & Request::MEM_ELIDE) {
+            for(int i = 0; i < pkt->req->getSize(); i += blkSize) {
+                CacheBlk *blk = tags->findBlock(pkt->req->_paddr_src + i, pkt->isSecure());
+                if(blk)
+                    invalidateBlock(blk);
+            }
         }
         return false;
     }

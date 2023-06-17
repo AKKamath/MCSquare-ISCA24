@@ -509,16 +509,15 @@ memcpy_elide(ThreadContext *tc, ExecContext *xc,
 }
 
 uint64_t
-memcpy_elide_free(ThreadContext *tc, ExecContext *xc,
-             Addr dest, Addr src, uint64_t len)
+memcpy_elide_free(ThreadContext *tc, ExecContext *xc, Addr dest, uint64_t len)
 {
-    DPRINTF(PseudoInst, "pseudo_inst::memcpy_elide(dest = 0x%lx, src = 0x%lx, "
-        "len = %ld)\n", dest, src, len);
+    DPRINTF(PseudoInst, "pseudo_inst::memcpy_elide_free(dest = 0x%lx, "
+        "len = %ld)\n", dest, len);
     if (!tc->getSystemPtr()->isTimingMode()) {
         fatal("To exeute memcpy_elide we require the memory system to be in "
               "'timing' mode.\n");
     }
-    Fault f = xc->writeMem((uint8_t*)src, len,
+    Fault f = xc->writeMem(NULL, len,
         dest, Request::MEM_ELIDE_FREE, NULL, std::vector<bool>(len, true));
 
     if (f != NoFault) {

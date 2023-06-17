@@ -19,8 +19,8 @@ namespace gem5
 {
 
 // Helpers to simplify code
-bool isMCSquare(RequestPtr req);
-bool isMCSquare(PacketPtr pkt);
+bool isMCSquare(const RequestPtr req);
+bool isMCSquare(const gem5::Packet* pkt);
 
 namespace memory
 {
