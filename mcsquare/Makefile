@@ -1,11 +1,12 @@
 .PHONY: mount_img umount_img compile_gem5 launch_gem5
 
-GEM5_IMG ?= ./mcsquare-18.04.img
-GEM5_CPU ?= O3CPU #TimingSimpleCPU # #X86KvmCPU
-GEM5_KERNEL ?= ./vmlinux-4.19.83
-GEM5_SCRIPT ?= ./scripts/run-script_copy.sh #./scripts/copy_sweep.sh
+GEM5_IMG ?= ./mcsquare-20.04.2.img
+GEM5_CPU ?= O3CPU#TimingSimpleCPU
+GEM5_KERNEL ?= ./vmlinux-5.7
+GEM5_TESTS ?= #seq-access #rand-access #multi-test##script# #seq-access 
+RESULTS ?= ./results
 
-MNT ?= mnt2
+MNT ?= mnt
 
 LDLIBS = -lrt
 
@@ -25,12 +26,26 @@ umount_img:
 compile_gem5:
 	cd ..; scons build/X86/gem5.opt
 
+NTHREADS ?= 2
+MEM_SIZE ?= 3GB
+MEM_CHAN ?= 8
+
+CMD_LINE ?= "earlyprintk=ttyS0 console=ttyS0 lpj=7999923 root=/dev/hda1"
+
 launch_gem5:
 	sudo ls; \
 	$(MAKE) compile_gem5; \
-	echo "run\nbt\n" > run.sh; \
-	sudo ../build/X86/gem5.opt --debug-flags=PseudoInst -d ./results/ ./fs.py  --fast-forward=1000000000000000000 --mem-size=8GB --cpu-type=${GEM5_CPU} --kernel=${GEM5_KERNEL} --disk-image=${GEM5_IMG} -n 1 --script=${GEM5_SCRIPT} --caches --l2cache > fullout
-	grep -e "switch_cpus.numCycles" results/stats.txt
+	for test in ${GEM5_TESTS}; do \
+		sudo $(MAKE) single_launch_gem5 TEST=$${test}; \
+	done;
+
+TEST ?= ${GEM5_TESTS}
+single_launch_gem5:
+	mkdir -p ${RESULTS}/${TEST};
+	../build/X86/gem5.opt --debug-flags=PseudoInst -d ${RESULTS}/${TEST} ./fs.py  --fast-forward=1000000000000000000 --mem-size=${MEM_SIZE} --cpu-type=${GEM5_CPU} \
+		--l1i-hwp-type=StridePrefetcher --l1d-hwp-type=StridePrefetcher --l2-hwp-type=StridePrefetcher --command-line=${CMD_LINE} \
+		--kernel=${GEM5_KERNEL} --disk-image=${GEM5_IMG} -n ${NTHREADS} --caches --l2cache --mem-channels=${MEM_CHAN} --script=./scripts/run-${TEST}.sh > ${RESULTS}/${TEST}/fullout_${GEM5_CPU}.txt;
+	python ./scripts/extract-${TEST}.py ${RESULTS}/${TEST}/stats.txt > ${RESULTS}/res_${TEST}.txt;
 
 copy_sweep: copy_sweep.cpp
 	g++ -o $@ $^ $(LDLIBS) -g  -I../include ../util/m5/build/x86/out/libm5.a -lpthread -pthread
