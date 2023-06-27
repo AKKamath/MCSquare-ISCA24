@@ -20,7 +20,7 @@ echo "
 #define PAGE_SIZE 4096
 #define PAGE_BITS 12
 #define CL_BITS 6
-#define ACCESSES (SIZE / sizeof(int))
+#define ACCESSES (SIZE / sizeof(uint64_t))
 
 #include <chrono>
 using namespace std::chrono;
@@ -32,7 +32,7 @@ using namespace std::chrono;
     _mm_mfence();  \
     OPERATION; \
     _mm_mfence(); \
-    printf(\"Dest: %d Src: %d\n\", *test2, *test1); \
+    printf(\"Dest: %lu Src: %lu\n\", *test2, *test1); \
     _mm_mfence(); \
     m5_reset_stats(0, 0); \
     sequential_test(test2, test1, size); \
@@ -40,16 +40,16 @@ using namespace std::chrono;
     memcpy_elide_free(test2, size);
 
 
-void reset_op(int* dest, int* src, uint64_t size) {
-    for(int i = 0; i < size / sizeof(int); i += PAGE_SIZE / sizeof(int)) {
+void reset_op(uint64_t* dest, uint64_t* src, uint64_t size) {
+    for(int i = 0; i < size / sizeof(uint64_t); i += PAGE_SIZE / sizeof(uint64_t)) {
         src[i]  = 500;
         dest[i] = 100;
     }
 }
 
-void sequential_test(int* dest, int* src, uint64_t size) {
+void sequential_test(uint64_t* dest, uint64_t* src, uint64_t size) {
     auto start = TIME_NOW;
-    int verify = 0;
+    uint64_t verify = 0;
     for(int i = 0; i < ACCESSES; i++) {
         verify += dest[i];
     }
@@ -128,9 +128,9 @@ echo "
 int main(int argc, char *argv[])
 {
     size_t size = SIZE;
-    int *test1 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
+    uint64_t *test1 = (uint64_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
         MAP_POPULATE | MAP_ANONYMOUS | MAP_SHARED, -1, 0);
-    int *test2 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
+    uint64_t *test2 = (uint64_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
         MAP_POPULATE | MAP_ANONYMOUS | MAP_SHARED, -1, 0);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
@@ -143,9 +143,9 @@ echo "
 int main(int argc, char *argv[])
 {
     size_t size = SIZE;
-    int *test1 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
+    uint64_t *test1 = (uint64_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
         MAP_POPULATE | MAP_ANONYMOUS | MAP_SHARED, -1, 0);
-    int *test2 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
+    uint64_t *test2 = (uint64_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
         MAP_POPULATE | MAP_ANONYMOUS | MAP_SHARED, -1, 0);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
@@ -158,9 +158,9 @@ echo "
 int main(int argc, char *argv[])
 {
     size_t size = SIZE;
-    int *test1 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
+    uint64_t *test1 = (uint64_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
         MAP_POPULATE | MAP_ANONYMOUS | MAP_SHARED, -1, 0);
-    int *test2 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
+    uint64_t *test2 = (uint64_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
         MAP_POPULATE | MAP_ANONYMOUS | MAP_SHARED, -1, 0);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
@@ -173,8 +173,8 @@ echo "
 int main(int argc, char *argv[])
 {
     size_t size = SIZE;
-    int *test1 = (int*)aligned_alloc(PAGE_SIZE, size);
-    int *test2 = (int*)aligned_alloc(PAGE_SIZE, size);
+    uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
+    uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
     TEST_OP(memcpy(test2, test1, size));
