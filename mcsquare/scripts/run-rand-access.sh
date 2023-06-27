@@ -13,11 +13,13 @@ echo "
 #include <stdlib.h>
 #include <x86intrin.h>
 #include <string.h>
+#include <algorithm>    // std::shuffle
+#include <random>       // std::default_random_engine
 #define SIZE (1024*4096)
 #define PAGE_SIZE 4096
 #define PAGE_BITS 12
 #define CL_BITS 6
-#define ACCESSES (SIZE / sizeof(int))
+#define ACCESSES (SIZE / sizeof(uint64_t))
 
 #include <chrono>
 using namespace std::chrono;
@@ -37,7 +39,7 @@ static uint64_t lfsr_fast(uint64_t lfsr)
     _mm_mfence();  \
     OPERATION; \
     _mm_mfence(); \
-    printf(\"Dest: %d Src: %d\n\", *test2, *test1); \
+    printf(\"Dest: %lu Src: %lu\n\", *test2, *test1); \
     _mm_mfence(); \
     m5_reset_stats(0, 0); \
     random_test(test2, test1, size); \
@@ -45,23 +47,27 @@ static uint64_t lfsr_fast(uint64_t lfsr)
     memcpy_elide_free(test2, size);
 
 
-void reset_op(int* dest, int* src, uint64_t size) {
-    int lfsr = 1;
-    for(int i = 0; i < size / sizeof(int); i++) {
-        lfsr = lfsr_fast(lfsr);
-        src[i] = lfsr;
+void reset_op(uint64_t* dest, uint64_t* src, uint64_t size) {
+    // Set initial values
+    for(int i = 0; i < size / sizeof(uint64_t); i++) {
+        src[i] = i;
         dest[i] = 0;
     }
+
+    // use a fixed seed:
+    unsigned seed = 100;
+    // Shuffle src into a random walk
+    std::shuffle (src, src + size / sizeof(uint64_t), std::default_random_engine(seed));
 }
 
-void random_test(int* dest, int* src, uint64_t size) {
-    auto start = TIME_NOW;
-    int index = 0;
-    for(int i = 0; i < ACCESSES; i++) {
-        index = (index + dest[index]) % (size / sizeof(int));
+void random_test(uint64_t* dest, uint64_t* src, uint64_t size) {
+    //auto start = TIME_NOW;
+    uint64_t index = 0;
+    for(uint64_t i = 0; i < ACCESSES; i++) {
+        index = dest[index];
     }
-    auto stop = TIME_NOW;
-    printf(\"Verify: %d, time %ld\n\", index, TIME_DIFF(stop,start));
+    //auto stop = TIME_NOW;
+    printf(\"Verify: %lu\n\", index);
 }
 
 void memcpy_elide_pgflush(void* dest, void* src, uint64_t len)
@@ -134,9 +140,9 @@ echo "
 int main(int argc, char *argv[])
 {
     size_t size = SIZE;
-    int *test1 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
+    uint64_t *test1 = (uint64_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
         MAP_POPULATE | MAP_ANONYMOUS | MAP_SHARED, -1, 0);
-    int *test2 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
+    uint64_t *test2 = (uint64_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
         MAP_POPULATE | MAP_ANONYMOUS | MAP_SHARED, -1, 0);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
@@ -149,9 +155,9 @@ echo "
 int main(int argc, char *argv[])
 {
     size_t size = SIZE;
-    int *test1 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
+    uint64_t *test1 = (uint64_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
         MAP_POPULATE | MAP_ANONYMOUS | MAP_SHARED, -1, 0);
-    int *test2 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
+    uint64_t *test2 = (uint64_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
         MAP_POPULATE | MAP_ANONYMOUS | MAP_SHARED, -1, 0);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
@@ -164,9 +170,9 @@ echo "
 int main(int argc, char *argv[])
 {
     size_t size = SIZE;
-    int *test1 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
+    uint64_t *test1 = (uint64_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
         MAP_POPULATE | MAP_ANONYMOUS | MAP_SHARED, -1, 0);
-    int *test2 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
+    uint64_t *test2 = (uint64_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
         MAP_POPULATE | MAP_ANONYMOUS | MAP_SHARED, -1, 0);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
@@ -179,8 +185,8 @@ echo "
 int main(int argc, char *argv[])
 {
     size_t size = SIZE;
-    int *test1 = (int*)aligned_alloc(PAGE_SIZE, size);
-    int *test2 = (int*)aligned_alloc(PAGE_SIZE, size);
+    uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
+    uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
     TEST_OP(memcpy(test2, test1, size));
