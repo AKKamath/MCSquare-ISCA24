@@ -23,6 +23,20 @@ def extract_cycles(file_path):
                 
             max_cycles = max(max_cycles, cycles)
             experiment_number += 1
+        elif not match:
+            match = re.match(r"system\.switch_cpus\.numCycles\s+(\d+)", line.strip())
+
+            if match:
+                cpu_num = 0
+                cycles = int(match.group(1))
+                #print(match, cpu_num, cycles)
+                
+                if cpu_num == 0 and experiment_number > 0: # Start of a new experiment
+                    experiment_cycles.append(max_cycles)
+                    max_cycles = 0
+                    
+                max_cycles = max(max_cycles, cycles)
+                experiment_number += 1
     
     # Append the max cycles for the last experiment
     experiment_cycles.append(max_cycles)
@@ -30,7 +44,7 @@ def extract_cycles(file_path):
     return experiment_cycles
 
 sizes=[4, 16, 64, 256, 1024]
-expts=["clflush", "clflush4", "clflush16", "clflushr", "clflushr4", "clflushr16", "clwb16", "store", "store4", "store16"]
+expts=["clflushopt", "clflushopt4", "clflushopt16", "clflush", "clflush4", "clflush16", "store", "store4", "store16", "load", "load4", "load16", "clwb16"]
 def main():
     file_path = sys.argv[1]
     experiment_cycles = extract_cycles(file_path)
