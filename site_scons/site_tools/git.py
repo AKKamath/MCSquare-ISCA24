@@ -108,8 +108,7 @@ def install_style_hooks(env):
 
 
 def generate(env):
-    if exists(env) and not gem5_scons.util.ignore_style():
-        install_style_hooks(env)
+    return
 
 
 def exists(env):
