@@ -554,21 +554,6 @@ TLB::translateTiming(const RequestPtr &req, ThreadContext *tc,
 {
     bool delayedResponse;
     assert(translation);
-    if(req->getFlags() & Request::MEM_ELIDE) {
-        // Set vAddr to that of source, and translate to pAddr
-        Addr temp_vaddr = req->getVaddr();
-        req->setVaddr(req->_vaddr_src);
-        Fault fault =
-            TLB::translate(req, tc, translation, mode, delayedResponse, true);
-        if(delayedResponse || fault != NoFault) {
-            printf("MC2: Tried translating %lx but failed\n", req->getVaddr());
-        }
-        assert(delayedResponse == false); // If not, no idea what to do here.
-        assert(fault == NoFault);         // Figure this out when it happens
-        // Store translated pAddr of source, and set vAddr back to that of destination
-        req->_paddr_src = req->getPaddr();
-        req->setVaddr(temp_vaddr);
-    }
     Fault fault =
         TLB::translate(req, tc, translation, mode, delayedResponse, true);
     if (!delayedResponse)

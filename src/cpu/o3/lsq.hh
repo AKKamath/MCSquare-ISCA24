@@ -660,6 +660,40 @@ class LSQ
         virtual std::string name() const { return "SplitDataRequest"; }
     };
 
+    class MemElideRequest : public LSQRequest
+    {
+      protected:
+        uint32_t numFragments;
+        uint32_t numReceivedPackets;
+
+      public:
+        MemElideRequest(LSQUnit* port, const DynInstPtr& inst,
+                bool isLoad, const Addr& addr, const uint32_t& size,
+                const Request::Flags & flags_, PacketDataPtr data=nullptr,
+                uint64_t* res=nullptr) :
+            LSQRequest(port, inst, isLoad, addr, size, flags_, data, res,
+                       nullptr),
+            numFragments(0),
+            numReceivedPackets(0)
+        {
+            flags.set(Flag::IsSplit);
+        }
+        virtual ~MemElideRequest() {}
+        virtual void markAsStaleTranslation();
+        virtual void finish(const Fault &fault, const RequestPtr &req,
+                gem5::ThreadContext* tc, BaseMMU::Mode mode);
+        virtual bool recvTimingResp(PacketPtr pkt);
+        virtual void initiateTranslation(uint64_t *src = NULL);
+        virtual void sendPacketToCache();
+        virtual void buildPackets();
+
+        virtual Cycles handleLocalAccess(
+                gem5::ThreadContext *thread, PacketPtr pkt);
+        virtual bool isCacheBlockHit(Addr blockAddr, Addr cacheBlockMask);
+        virtual RequestPtr mainReq();
+        virtual std::string name() const { return "MemElideRequest"; }
+    };
+
     /** Constructs an LSQ with the given parameters. */
     LSQ(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params);
 

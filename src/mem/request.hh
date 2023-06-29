@@ -102,6 +102,7 @@ class Request
     typedef gem5::Flags<FlagsType> Flags;
 
     Addr _vaddr_src = MaxAddr;
+    Addr _vaddr_dest = MaxAddr;
     Addr _paddr_src = 0;
     Addr _paddr_dest = 0;
 
