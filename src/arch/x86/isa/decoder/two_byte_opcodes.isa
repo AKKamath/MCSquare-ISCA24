@@ -156,27 +156,14 @@
             // to play with so there can be quite a few pseudo
             // instructions.
             //0x04: loadall_or_reset_or_hang();
-            0x4: BasicMemInst::gem5Op({{
+            0x4: BasicOperate::gem5Op({{
                 uint64_t result;
-                bool recognized = true;
-                if(IMMEDIATE != M5OP_MC2 && IMMEDIATE != M5OP_MCFREE) {
-                    recognized = pseudo_inst::pseudoInst<X86PseudoInstABI>(
+                bool recognized = pseudo_inst::pseudoInst<X86PseudoInstABI>(
                         xc->tcBase(), IMMEDIATE, result, xc);
-                    if (!recognized)
-                        fault = std::make_shared<InvalidOpcode>();
-                    Rax = result;
-                }
-                else {
-                    uint64_t fault_ptr;
-                    recognized = pseudo_inst::pseudoInst<X86PseudoInstABI>(
-                        xc->tcBase(), IMMEDIATE, fault_ptr, xc);
-                    if(fault_ptr != 0) {
-                        Fault temp_fault = *(Fault*)fault_ptr;
-                        fault = temp_fault;
-                        free((Fault*)fault_ptr);
-                    }
-                }
-            }}, IsNonSpeculative, IsStore);
+                Rax = result;
+                if (!recognized)
+                    fault = std::make_shared<InvalidOpcode>();
+            }}, IsNonSpeculative);
             0x05: decode FullSystemInt {
                 0: SyscallInst::syscall({{
                     return std::make_shared<SESyscallFault>();
@@ -205,7 +192,19 @@
             0x1: wbinvd(); // privileged
             0x2: Inst::UD2();
             0x3: Inst::UD2();
-            0x4: Inst::UD2();
+            0x4: BasicMemInst::memElideOp({{
+                bool recognized = true;
+                uint64_t fault_ptr;
+                recognized = pseudo_inst::pseudoInst<X86PseudoInstABI>(
+                    xc->tcBase(), IMMEDIATE, fault_ptr, xc);
+                if(fault_ptr != 0) {
+                    Fault temp_fault = *(Fault*)fault_ptr;
+                    fault = temp_fault;
+                    free((Fault*)fault_ptr);
+                }
+                if (!recognized)
+                    fault = std::make_shared<InvalidOpcode>();
+            }}, IsNonSpeculative, IsStore);
             0x5: Inst::PREFETCH(Mb);
             0x6: FailUnimpl::femms();
             0x7: decode IMMEDIATE {

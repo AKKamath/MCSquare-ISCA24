@@ -111,10 +111,10 @@ def template BasicMemDeclare {{
       public:
         // Constructor.
         %(class_name)s(ExtMachInst machInst);
-        Fault execute(ExecContext *, Trace::InstRecord *) const override;
-        Fault initiateAcc(ExecContext *, Trace::InstRecord *) const override;
+        Fault execute(ExecContext *, trace::InstRecord *) const override;
+        Fault initiateAcc(ExecContext *, trace::InstRecord *) const override;
         Fault completeAcc(PacketPtr, ExecContext *,
-                          Trace::InstRecord *) const override;
+                          trace::InstRecord *) const override;
     };
 }};
 
@@ -130,7 +130,7 @@ def template BasicMemConstructor {{
 
 def template BasicMemInitiateAcc {{
     Fault %(class_name)s::initiateAcc(ExecContext * xc,
-            Trace::InstRecord * traceData) const
+            trace::InstRecord * traceData) const
     {
             Fault fault = NoFault;
 
@@ -149,7 +149,7 @@ def template BasicMemInitiateAcc {{
 
 def template BasicMemCompleteAcc {{
     Fault %(class_name)s::completeAcc(PacketPtr pkt, ExecContext *xc,
-            Trace::InstRecord *traceData) const
+            trace::InstRecord *traceData) const
     {
         // Need to figure this out.
         /*

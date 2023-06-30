@@ -108,8 +108,10 @@
     M5OP(m5_work_end, M5OP_WORK_END)                            \
     M5OP(m5_dist_toggle_sync, M5OP_DIST_TOGGLE_SYNC)            \
     M5OP(m5_workload, M5OP_WORKLOAD)                            \
-    M5OP(m5_memcpy_elide, M5OP_MC2)                             \
-    M5OP(m5_memcpy_elide_free, M5OP_MCFREE)
+
+#define M5OP2_FOREACH                                           \
+    M5OP2(m5_memcpy_elide, M5OP_MC2)                            \
+    M5OP2(m5_memcpy_elide_free, M5OP_MCFREE)
 
 #define M5OP_MERGE_TOKENS_I(a, b) a##b
 #define M5OP_MERGE_TOKENS(a, b) M5OP_MERGE_TOKENS_I(a, b)

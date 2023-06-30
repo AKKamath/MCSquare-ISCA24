@@ -43,3 +43,19 @@
 #define M5OP(name, func) m5op_func name, func;
         M5OP_FOREACH
 #undef M5OP
+
+.macro m5op_func2, name, func
+        .globl \name
+        .func \name
+\name:
+        .byte 0x0F, 0x0C
+        .word \func
+        ret
+        .endfunc
+.endm
+
+.text
+
+#define M5OP2(name, func) m5op_func2 name, func;
+        M5OP2_FOREACH
+#undef M5OP2

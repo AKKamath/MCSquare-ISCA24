@@ -37,6 +37,9 @@ DispatchTable inst_dispatch = {
 #define M5OP(name, func) .name = &::name,
 M5OP_FOREACH
 #undef M5OP
+#define M5OP2(name, func) .name = &::name,
+M5OP2_FOREACH
+#undef M5OP2
 };
 
 } // anonymous namespace

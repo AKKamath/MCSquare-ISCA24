@@ -92,6 +92,11 @@ void m5_workload();
 M5OP_FOREACH
 #undef M5OP
 
+#define M5OP2(name, func) __typeof__(name) M5OP_MERGE_TOKENS(name, _addr); \
+                          __typeof__(name) M5OP_MERGE_TOKENS(name, _semi);
+M5OP2_FOREACH
+#undef M5OP2
+
 #ifdef __cplusplus
 }
 #endif
