@@ -42,6 +42,9 @@ struct DispatchTable
 #define M5OP(name, func) __typeof__(&::name) name;
 M5OP_FOREACH
 #undef M5OP
+#define M5OP2(name, func) __typeof__(&::name) name;
+M5OP2_FOREACH
+#undef M5OP2
 };
 
 #endif // __DISPATCH_TABLE_H__
