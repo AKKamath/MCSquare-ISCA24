@@ -52,5 +52,5 @@ class X86ISA(BaseISA):
     # https://gem5.atlassian.net/browse/GEM5-1300) we opted to use
     # "HygonGenuine" instead.
     vendor_string = Param.String(
-        "HygonGenuine", "Vendor string for CPUID instruction"
+        "M5 Simulator", "Vendor string for CPUID instruction"
     )
