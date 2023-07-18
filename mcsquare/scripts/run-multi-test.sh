@@ -54,8 +54,9 @@ void memcpy_elide_clflush(void* dest, void* src, uint64_t len)
     void *temp_dest = (void*)((uint64_t)dest & ~((uint64_t)63));
     void *temp_src = (void*)((uint64_t)src & ~((uint64_t)63));
     uint64_t pages = (len >> PAGE_BITS) + (len & ((1 << PAGE_BITS) - 1) ? 1 : 0);
+    uint64_t flush_sz = len < PAGE_SIZE ? (len + 63) / 64 : 64;
     for(uint64_t page = 0; page < pages; ++page) {
-        for (uint64_t i = 0; i < 64; ++i) {
+        for (uint64_t i = 0; i < flush_sz; ++i) {
             uint64_t offset = (i << CL_BITS) + (page << PAGE_BITS);
             _mm_clflushopt( (void*)((uint64_t)temp_dest + offset) );
             _mm_clflushopt( (void*)((uint64_t)temp_src + offset) );
@@ -70,11 +71,12 @@ void memcpy_elide_clflush_src(void* dest, void* src, uint64_t len)
 {
     void *temp_dest = (void*)((uint64_t)dest & ~((uint64_t)63));
     void *temp_src = (void*)((uint64_t)src & ~((uint64_t)63));
+    uint64_t flush_sz = len < PAGE_SIZE ? (len + 63) / 64 : 64;
     uint64_t pages = (len >> PAGE_BITS) + (len & ((1 << PAGE_BITS) - 1) ? 1 : 0);
     for(uint64_t page = 0; page < pages; ++page) {
 
         _mm_clflushopt( (void*)((uint64_t)temp_dest + (page << PAGE_BITS)) );
-        for (uint64_t i = 0; i < 64; ++i) {
+        for (uint64_t i = 0; i < flush_sz; ++i) {
             uint64_t offset = (i << CL_BITS) + (page << PAGE_BITS);
             _mm_clflushopt( (void*)((uint64_t)temp_src + offset) );
         }
@@ -101,7 +103,7 @@ void memcpy_elide_free(void* dest, uint64_t len)
 }
 " > test_headers.h
 
-sizes=(4096 16384 65536 262144 1048576)
+sizes=(64 256 1024 4096 16384 65536 262144 1048576)
 for i in ${sizes[@]}; do
     echo ${i};
     echo "
