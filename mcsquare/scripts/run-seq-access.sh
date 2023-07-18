@@ -63,8 +63,7 @@ void memcpy_elide_pgflush(void* dest, void* src, uint64_t len)
     void *temp_src = (void*)((uint64_t)src & ~((uint64_t)63));
     uint64_t pages = (len >> PAGE_BITS) + (len & ((1 << PAGE_BITS) - 1) ? 1 : 0);
     for (uint64_t page = 0; page < pages; ++page) {
-        _mm_clflushopt( (void*)((uint64_t)temp_dest + (page << PAGE_BITS)) );
-        _mm_clflushopt( (void*)((uint64_t)temp_src + (page << PAGE_BITS)) );
+        _mm_clwb( (void*)((uint64_t)temp_src + (page << PAGE_BITS)) );
         _mm_mfence();
         m5_memcpy_elide((void*)((uint64_t)temp_dest + (page << PAGE_BITS)),
             (void*)((uint64_t)temp_src + (page << PAGE_BITS)), PAGE_SIZE);
@@ -79,8 +78,7 @@ void memcpy_elide_clflush(void* dest, void* src, uint64_t len)
     for(uint64_t page = 0; page < pages; ++page) {
         for (uint64_t i = 0; i < 64; ++i) {
             uint64_t offset = (i << CL_BITS) + (page << PAGE_BITS);
-            _mm_clflushopt( (void*)((uint64_t)temp_dest + offset) );
-            _mm_clflushopt( (void*)((uint64_t)temp_src + offset) );
+            _mm_clwb( (void*)((uint64_t)temp_src + offset) );
         }
         _mm_mfence();
         m5_memcpy_elide((void*)((uint64_t)temp_dest + (page << PAGE_BITS)), 
@@ -94,11 +92,9 @@ void memcpy_elide_clflush_src(void* dest, void* src, uint64_t len)
     void *temp_src = (void*)((uint64_t)src & ~((uint64_t)63));
     uint64_t pages = (len >> PAGE_BITS) + (len & ((1 << PAGE_BITS) - 1) ? 1 : 0);
     for(uint64_t page = 0; page < pages; ++page) {
-
-        _mm_clflushopt( (void*)((uint64_t)temp_dest + (page << PAGE_BITS)) );
         for (uint64_t i = 0; i < 64; ++i) {
             uint64_t offset = (i << CL_BITS) + (page << PAGE_BITS);
-            _mm_clflushopt( (void*)((uint64_t)temp_src + offset) );
+            _mm_clwb( (void*)((uint64_t)temp_src + offset) );
         }
         _mm_mfence();
         m5_memcpy_elide((void*)((uint64_t)temp_dest + (page << PAGE_BITS)), 
@@ -111,13 +107,9 @@ void memcpy_elide_free(void* dest, uint64_t len)
     /*void *temp_dest = (void*)((uint64_t)dest & ~((uint64_t)63));
     uint64_t pages = (len >> PAGE_BITS) + (len & ((1 << PAGE_BITS) - 1) ? 1 : 0);
     for(uint64_t page = 0; page < pages; ++page) {
-        _mm_clflushopt( (void*)((uint64_t)temp_dest + (page << PAGE_BITS)) );
-        _mm_mfence();
         m5_memcpy_elide_free((void*)((uint64_t)temp_dest + (page << PAGE_BITS)), PAGE_SIZE);
     }
     _mm_mfence();*/
-    _mm_clflushopt( dest );
-    _mm_mfence();
     m5_memcpy_elide_free(dest, 1);
     _mm_mfence();
 }
