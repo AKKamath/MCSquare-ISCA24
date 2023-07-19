@@ -51,6 +51,7 @@ DebugFlag('SysBridge')
 SimObject('MemCtrl.py', sim_objects=['MemCtrl'],
         enums=['MemSched'])
 SimObject('HeteroMemCtrl.py', sim_objects=['HeteroMemCtrl'])
+SimObject('MCSquare.py', sim_objects=['MCSquare'])
 SimObject('HBMCtrl.py', sim_objects=['HBMCtrl'])
 SimObject('MemInterface.py', sim_objects=['MemInterface'], enums=['AddrMap'])
 SimObject('DRAMInterface.py', sim_objects=['DRAMInterface'],

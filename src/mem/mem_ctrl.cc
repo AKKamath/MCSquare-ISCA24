@@ -78,7 +78,8 @@ MemCtrl::MemCtrl(const MemCtrlParams &p) :
     backendLatency(p.static_backend_latency),
     commandWindow(p.command_window),
     prevArrival(0),
-    stats(*this)
+    stats(*this),
+    mcsquare(p.mcsquare)
 {
     DPRINTF(MemCtrl, "Setting up controller\n");
 
@@ -421,10 +422,10 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
 
     if(isMCSquare(pkt)) {
         if(pkt->req->getFlags() & Request::MEM_ELIDE)
-            mcsquare.insertEntry(pkt->getAddr(), 
+            mcsquare->insertEntry(pkt->getAddr(), 
                 pkt->req->_paddr_src, pkt->req->getSize());
         else if(pkt->req->getFlags() & Request::MEM_ELIDE_FREE)
-            mcsquare.deleteEntry(pkt->getAddr(), pkt->req->getSize());
+            mcsquare->deleteEntry(pkt->getAddr(), pkt->req->getSize());
         // See if we're responsible for sending a response back
         bool weContain = false;
         AddrRangeList addrList = getAddrRanges();
@@ -454,16 +455,23 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
         return true;
     }
 
-    if(MCSquare::Types type = mcsquare.contains(pkt)) {
+    if(MCSquare::Types type = mcsquare->contains(pkt)) {
         // TODO: Atomic
         if(pkt->isWrite()) {
             // Read from dest will be taken care of when responding.
             // We need to only handle writes to src/dest here
             // TODO: Write to src, write to dest
             if(type == MCSquare::Types::TYPE_DEST) {
-                mcsquare.splitEntry(pkt->getAddr(), pkt->getSize());
+                mcsquare->splitEntry(pkt->getAddr(), pkt->getSize());
                 printf("Found a write to dest %lx!\n", pkt->getAddr());
             }
+        }
+        if((pkt->isRead() && 
+            type == MCSquare::Types::TYPE_DEST && 
+            !(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC))) {
+            printf("Found a read to dest %lx, applying elision penalty\n", pkt->getAddr());
+            accessAndRespond(pkt, frontendLatency + mcsquare->getPenalty(), dram);
+            return true;
         }
     }
 
@@ -673,7 +681,7 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
              "Can't handle address range for packet %s\n", pkt->print());
     mem_intr->access(pkt);
 
-    if(pkt->isRead() && mcsquare.contains(pkt) == MCSquare::Types::TYPE_DEST) {
+    if(pkt->isRead() && mcsquare->contains(pkt) == MCSquare::Types::TYPE_DEST) {
         // Add redirect flag to redirect
         printf("Setting redirect packet! %lx %lx\n", pkt->req->_paddr_dest, pkt->req->_paddr_src);
         pkt->req->setFlags(Request::MEM_ELIDE_REDIRECT_SRC);

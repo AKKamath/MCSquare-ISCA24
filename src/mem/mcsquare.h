@@ -14,6 +14,8 @@
 #include "mem/qport.hh"
 #include "params/MemCtrl.hh"
 #include "sim/eventq.hh"
+#include "sim/sim_object.hh"
+#include "params/MCSquare.hh"
 
 namespace gem5
 {
@@ -29,7 +31,7 @@ class MemInterface;
 class DRAMInterface;
 class NVMInterface;
 
-class MCSquare {
+class MCSquare : public SimObject {
     struct TableEntry {
       Addr dest;
       Addr src;
@@ -46,6 +48,8 @@ class MCSquare {
     };
 
     std::list<TableEntry> m_table;
+    const int max_tbl_sz;
+    const Tick tbl_acc_lat;
 
   public:
     enum Types {
@@ -54,10 +58,17 @@ class MCSquare {
       TYPE_DEST,
     };
 
+    MCSquare(const MCSquareParams &params) : SimObject(params),
+      max_tbl_sz(params.table_size), tbl_acc_lat(params.table_penalty) {
+        printf("Created MCSquare with %d size for %lu tiks\n", max_tbl_sz, tbl_acc_lat);
+      }
+
     void insertEntry(Addr dest, Addr src, uint64_t size);
     void deleteEntry(Addr dest, uint64_t size);
     void splitEntry(Addr splitAddr, uint64_t size);
     Types contains(PacketPtr pkt);
+
+    Tick getPenalty() { return tbl_acc_lat; }
 };
 
 } // namespace memory

@@ -780,7 +780,7 @@ class MemCtrl : public qos::MemCtrl
     virtual void startup() override;
     virtual void drainResume() override;
 
-    MCSquare mcsquare;
+    MCSquare *mcsquare;
 
   protected:
 
