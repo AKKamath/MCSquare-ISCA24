@@ -7,4 +7,4 @@ class MCSquare(SimObject):
     cxx_class = "gem5::memory::MCSquare"
 
     table_size = Param.Int(2048, "Number of entries that elision table can hold")
-    table_penalty = Param.Latency("20ns", "Cycle penalty for reading a data copy that was elided")
+    table_penalty = Param.Latency("10ns", "Cycle penalty for reading a data copy that was elided")

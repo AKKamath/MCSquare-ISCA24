@@ -466,11 +466,12 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
                 printf("Found a write to dest %lx!\n", pkt->getAddr());
             }
         }
+        // Read to destination. Add table access latency then bounce packet.
         if((pkt->isRead() && 
             type == MCSquare::Types::TYPE_DEST && 
             !(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC))) {
             printf("Found a read to dest %lx, applying elision penalty\n", pkt->getAddr());
-            accessAndRespond(pkt, frontendLatency + mcsquare->getPenalty(), dram);
+            accessAndRespond(pkt, mcsquare->getPenalty(), dram);
             return true;
         }
     }
