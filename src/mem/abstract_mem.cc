@@ -443,7 +443,17 @@ AbstractMemory::access(PacketPtr pkt)
             trackLoadLocked(pkt);
         }
         if (pmemAddr) {
-            pkt->setData(host_addr);
+            if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
+                if(pkt->getAddr() <= pkt->req->_paddr_src)
+                    pkt->setData(host_addr, 0, 
+                                 pkt->req->_paddr_src - pkt->getAddr(), 
+                                 64 - (pkt->req->_paddr_src & 63));
+                else
+                    pkt->setData(host_addr, 64 - (pkt->req->_paddr_src & 63), 0, 
+                                 (pkt->req->_paddr_src & 63));
+            } else {
+                pkt->setData(host_addr);
+            }
         }
         TRACE_PACKET(pkt->req->isInstFetch() ? "IFetch" : "Read");
         stats.numReads[pkt->req->requestorId()]++;
