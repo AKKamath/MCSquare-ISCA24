@@ -36,14 +36,20 @@ launch_gem5:
 	sudo ls; \
 	$(MAKE) compile_gem5; \
 	for test in ${GEM5_TESTS}; do \
-		sudo $(MAKE) single_launch_gem5 TEST=$${test}; \
+		$(MAKE) single_launch_gem5 TEST=$${test}; \
 		$(MAKE) extract_test TEST=$${test}; \
 	done;
 
 TEST ?= ${GEM5_TESTS}
 single_launch_gem5:
 	mkdir -p ${RESULTS}/${TEST};
-	../build/X86/gem5.opt --debug-flags=PseudoInst -d ${RESULTS}/${TEST} ./fs.py  --fast-forward=1000000000000000000 --mem-size=${MEM_SIZE} --cpu-type=${GEM5_CPU} \
+	sudo ../build/X86/gem5.opt --debug-flags=PseudoInst -d ${RESULTS}/${TEST} ./fs.py  --fast-forward=1000000000000000000 --mem-size=${MEM_SIZE} --cpu-type=${GEM5_CPU} \
+		--l1i-hwp-type=StridePrefetcher --l1d-hwp-type=StridePrefetcher --l2-hwp-type=StridePrefetcher --command-line=${CMD_LINE} --cpu-clock="4GHz" \
+		--kernel=${GEM5_KERNEL} --disk-image=${GEM5_IMG} -n ${NTHREADS} --caches --l2cache --mem-channels=${MEM_CHAN} --script=./scripts/run-${TEST}.sh > ${RESULTS}/${TEST}/fullout_${GEM5_CPU}.txt;
+
+single_launch_gem5_debug:
+	mkdir -p ${RESULTS}/${TEST};
+	sudo gdb -x run.sh --args ../build/X86/gem5.opt --debug-flags=PseudoInst -d ${RESULTS}/${TEST} ./fs.py  --fast-forward=1000000000000000000 --mem-size=${MEM_SIZE} --cpu-type=${GEM5_CPU} \
 		--l1i-hwp-type=StridePrefetcher --l1d-hwp-type=StridePrefetcher --l2-hwp-type=StridePrefetcher --command-line=${CMD_LINE} --cpu-clock="4GHz" \
 		--kernel=${GEM5_KERNEL} --disk-image=${GEM5_IMG} -n ${NTHREADS} --caches --l2cache --mem-channels=${MEM_CHAN} --script=./scripts/run-${TEST}.sh > ${RESULTS}/${TEST}/fullout_${GEM5_CPU}.txt;
 
