@@ -35,7 +35,7 @@
 #include <unistd.h>
 #include "mcsquare.h"
 
-#define OPT_THRESHOLD 63
+#define OPT_THRESHOLD 255
 
 #define UFFD_PROTO
 
@@ -165,10 +165,10 @@ void *memcpy(void *dest, const void *src, size_t n) {
   const char cannot_optimize = (n <= OPT_THRESHOLD);
 
   if (cannot_optimize) {
-    printf("Cannot elide, memcpying\n");
+    //printf("Cannot elide, memcpying\n");
     return libc_memcpy(dest, src, n);
   }
-  printf("Eliding\n");
+  //printf("Eliding\n");
   memcpy_elide_clwb(dest, src, n);
   return dest;
 }
