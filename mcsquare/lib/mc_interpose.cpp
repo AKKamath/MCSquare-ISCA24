@@ -78,6 +78,11 @@ static void memcpy_elide_clwb(void* dest, const void* src, uint64_t len)
         _mm_clwb( (void*)temp_src );
         temp_src += CL_SIZE;
     }
+    uint64_t temp_dest = ((uint64_t)dest & ~((uint64_t)4095));
+    while(temp_dest < (uint64_t)dest + len) {
+        _mm_clwb( (void*)temp_dest );
+        temp_dest += PAGE_SIZE;
+    }
     _mm_mfence();
     // Cacheline-align dest
     uint64_t left_fringe = CL_SIZE - ((uint64_t)dest & (CL_SIZE - 1));
