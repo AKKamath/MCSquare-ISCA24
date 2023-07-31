@@ -166,13 +166,19 @@ void print_trace(void) {
 
 void *memcpy(void *dest, const void *src, size_t n) {
   ensure_init();
-
   const char cannot_optimize = (n <= OPT_THRESHOLD);
 
   if (cannot_optimize) {
     //printf("Cannot elide, memcpying\n");
     return libc_memcpy(dest, src, n);
   }
+
+  static bool ignore = 1;
+  if(ignore) {
+    ignore = false;
+    return libc_memcpy(dest, src, n);
+  }
+
   //printf("Eliding\n");
   memcpy_elide_clwb(dest, src, n);
   return dest;
