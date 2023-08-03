@@ -173,9 +173,12 @@ void *memcpy(void *dest, const void *src, size_t n) {
     return libc_memcpy(dest, src, n);
   }
 
-  static bool ignore = 1;
+  static int ignore = 2;
   if(ignore) {
-    ignore = false;
+    --ignore;
+    if(ignore == 0) {
+      printf("Starting memcpy\n");
+    }
     return libc_memcpy(dest, src, n);
   }
 
