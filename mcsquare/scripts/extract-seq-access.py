@@ -29,20 +29,24 @@ def extract_cycles(file_path):
 
     return experiment_cycles
 
-expts=["clflush", "clflush_src", "memcpy", "zIO"]
+expts=["clwb", "memcpy", "zIO"]
+sizes=["10%", "25%", "50%", "100%"]
 def main():
     file_path = sys.argv[1]
     experiment_cycles = extract_cycles(file_path)
 
     print("", end="\t")
-    for expt in expts:
-        print("%s" % expt, end="\t"),
+    for size in sizes:
+        print("%s" % size, end="\t"),
     print(""),
 
     i = 0
     for expt in expts:
-        print("%d" % experiment_cycles[i], end="\t"),
-        i += 1
+        print("%s" % expt, end="\t")
+        for size in sizes:
+            print("%d" % experiment_cycles[i], end="\t")
+            i += 1
+        print()
     print()
 
 
