@@ -61,6 +61,7 @@ uint64_t num_fast_writes, num_slow_writes, num_fast_copy, num_slow_copy,
 uint64_t time_search, time_insert, time_other;
 
 static void *(*libc_memcpy)(void *dest, const void *src, size_t n);
+static void *(*libc_malloc)(size_t n);
 //static void (*libc_free)(void *ptr);
 
 static inline uint64_t rdtsc(void)
@@ -187,6 +188,19 @@ void *memcpy(void *dest, const void *src, size_t n) {
   return dest;
 }
 
+void *malloc(size_t size, 
+             const char* str = __builtin_FUNCTION(), 
+             const char* file = __builtin_FILE(), 
+             const int line = __builtin_LINE()) {
+  ensure_init();
+  printf("Malloc called by %s, %s (line %d) Size %ld\n", file, str, line, size);
+  fflush(stdout);
+  void *alloc = libc_malloc(size);
+  printf("Alloced %p\n", alloc);
+  fflush(stdout);
+  return alloc;
+}
+
 //void free(void *ptr) {
   // uint64_t ptr_bounded = (uint64_t)ptr & PAGE_MASK;
   // snode *entry = skiplist_search(&addr_list, ptr_bounded);
@@ -239,6 +253,7 @@ static void init(void) {
   printf("MCSquare start\n");
 
   libc_memcpy = (void* (*)(void*, const void*, long unsigned int))bind_symbol("memcpy");
+  libc_malloc = (void* (*)(size_t))bind_symbol("malloc");
   //libc_free = bind_symbol("free");
   
   pthread_mutex_init(&mu, NULL);
