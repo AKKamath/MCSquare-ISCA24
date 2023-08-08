@@ -61,7 +61,7 @@ uint64_t num_fast_writes, num_slow_writes, num_fast_copy, num_slow_copy,
 uint64_t time_search, time_insert, time_other;
 
 static void *(*libc_memcpy)(void *dest, const void *src, size_t n);
-static void *(*libc_malloc)(size_t n);
+static void *(*libc_malloc)(size_t size);
 //static void (*libc_free)(void *ptr);
 
 static inline uint64_t rdtsc(void)
@@ -100,7 +100,7 @@ static void memcpy_elide_clwb(void* dest, const void* src, uint64_t len)
         // Pick minimum size left as elide_size
         uint64_t elide_size = cust_min(cust_min(src_off, dest_off), len);
         if(elide_size < CL_SIZE)
-          memcpy(dest, (void*)temp_src, elide_size);
+          libc_memcpy(dest, (void*)temp_src, elide_size);
         else {
           // Make elide size a multiple of 64
           elide_size &= (~63);
@@ -135,7 +135,7 @@ static void memcpy_elide_clwb_huge(void* dest, const void* src, uint64_t len)
         // Pick minimum size left as elide_size
         uint64_t elide_size = cust_min(cust_min(src_off, dest_off), len);
         if(elide_size < CL_SIZE)
-          memcpy(dest, (void*)temp_src, elide_size);
+          libc_memcpy(dest, (void*)temp_src, elide_size);
         else {
           // Make elide size a multiple of 64
           elide_size &= (~63);
@@ -149,7 +149,7 @@ static void memcpy_elide_clwb_huge(void* dest, const void* src, uint64_t len)
 
 static void memcpy_elide_free(void* dest, uint64_t len)
 {
-    m5_memcpy_elide_free(dest, 1);
+    m5_memcpy_elide_free(dest, len);
     _mm_mfence();
 }
 
@@ -178,7 +178,7 @@ void *memcpy(void *dest, const void *src, size_t n) {
   if(ignore) {
     --ignore;
     if(ignore == 0) {
-      printf("Starting memcpy\n");
+      fprintf(stderr, "Starting memcpy\n");
     }
     return libc_memcpy(dest, src, n);
   }
@@ -188,17 +188,12 @@ void *memcpy(void *dest, const void *src, size_t n) {
   return dest;
 }
 
-void *malloc(size_t size, 
-             const char* str = __builtin_FUNCTION(), 
-             const char* file = __builtin_FILE(), 
-             const int line = __builtin_LINE()) {
+void *malloc(size_t size) {
   ensure_init();
-  printf("Malloc called by %s, %s (line %d) Size %ld\n", file, str, line, size);
-  fflush(stdout);
+  fprintf(stderr, "Malloc called size %ld; ", size);
   void *alloc = libc_malloc(size);
-  printf("Alloced %p\n", alloc);
-  fflush(stdout);
-  return alloc;
+  fprintf(stderr, "Alloced %p\n", alloc);
+  return (void*)alloc;
 }
 
 //void free(void *ptr) {
@@ -250,10 +245,12 @@ void *print_stats() {
 }
 
 static void init(void) {
-  printf("MCSquare start\n");
+  fprintf(stderr, "MCSquare start\n");
 
   libc_memcpy = (void* (*)(void*, const void*, long unsigned int))bind_symbol("memcpy");
   libc_malloc = (void* (*)(size_t))bind_symbol("malloc");
+
+  fprintf(stderr, "Memcpy %p, malloc %p\n", libc_memcpy, libc_malloc);
   //libc_free = bind_symbol("free");
   
   pthread_mutex_init(&mu, NULL);
