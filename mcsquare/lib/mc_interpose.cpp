@@ -190,6 +190,8 @@ void *memcpy(void *dest, const void *src, size_t n) {
 
 void *malloc(size_t size) {
   ensure_init();
+  if(size < OPT_THRESHOLD)
+    return libc_malloc(size);
   fprintf(stderr, "Malloc called size %ld; ", size);
   void *alloc = libc_malloc(size);
   fprintf(stderr, "Alloced %p\n", alloc);
