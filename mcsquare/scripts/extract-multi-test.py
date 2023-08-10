@@ -30,7 +30,7 @@ def extract_cycles(file_path):
     return experiment_cycles
 
 sizes=[64, 256, 1024, 4096, 16384, 65536, 262144, 1048576]
-expts=["pgflush_mcsquare", "clflush_mcsquare", "clflush_src_mcsquare", "memcpy", "zIO"]
+expts=["pgflush_mcsquare", "clwb_mcsquare", "memcpy", "zIO"]
 def main():
     file_path = sys.argv[1]
     experiment_cycles = extract_cycles(file_path)
