@@ -33,44 +33,18 @@
 #include <poll.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <unordered_map>
 #include "mcsquare.h"
 
 #define OPT_THRESHOLD 255
 
-#define UFFD_PROTO
-
-#define LOGON 0
-#if LOGON
-#define LOG(...) fprintf(stderr, __VA_ARGS__)
-#else
-#define LOG(...)                                                               \
-  while (0) {                                                                  \
-  }
-#endif
-
-#define LOG_STATS(...) fprintf(stderr, __VA_ARGS__)
-
-pthread_t fault_thread, stats_thread;
-
-pthread_mutex_t mu;
-
 static inline void ensure_init(void);
-
-uint64_t num_fast_writes, num_slow_writes, num_fast_copy, num_slow_copy,
-    num_faults;
-uint64_t time_search, time_insert, time_other;
 
 static void *(*libc_memcpy)(void *dest, const void *src, size_t n);
 static void *(*libc_malloc)(size_t size);
-//static void (*libc_free)(void *ptr);
+static void (*libc_free)(void *ptr);
 
-static inline uint64_t rdtsc(void)
-{
-    uint32_t eax, edx;
-    asm volatile ("rdtsc" : "=a" (eax), "=d" (edx));
-    return ((uint64_t) edx << 32) | eax;
-}
-
+std::unordered_map<void *, size_t> allocs;
 
 static void memcpy_elide_clwb(void* dest, const void* src, uint64_t len)
 {
@@ -110,6 +84,7 @@ static void memcpy_elide_clwb(void* dest, const void* src, uint64_t len)
         temp_src = ((uint64_t)src + elide_size);
         len -= elide_size;
     }
+    _mm_mfence();
 }
 
 static void memcpy_elide_clwb_huge(void* dest, const void* src, uint64_t len)
@@ -145,32 +120,33 @@ static void memcpy_elide_clwb_huge(void* dest, const void* src, uint64_t len)
         temp_src = ((uint64_t)src + elide_size);
         len -= elide_size;
     }
+    _mm_mfence();
 }
 
 static void memcpy_elide_free(void* dest, uint64_t len)
 {
-    m5_memcpy_elide_free(dest, len);
+    uint64_t temp_dest = ((uint64_t)dest & ~((uint64_t)63));
+    while(temp_dest < (uint64_t)dest + len) {
+        _mm_clwb( (void*)temp_dest );
+        temp_dest += CL_SIZE;
+    }
     _mm_mfence();
-}
-
-void print_trace(void) {
-  char **strings;
-  size_t i, size;
-  enum Constexpr { MAX_SIZE = 1024 };
-  void *array[MAX_SIZE];
-  size = backtrace(array, MAX_SIZE);
-  strings = backtrace_symbols(array, size);
-  for (i = 0; i < 5; i++)
-    LOG("%s\n", strings[i]);
-  free(strings);
+    while(len > 0) {
+        // Calculate remaining size in page for dest
+        uint64_t dest_off = PAGE_SIZE - ((uint64_t)dest & (PAGE_SIZE - 1));
+        // Pick minimum size left as elide_size
+        uint64_t free_size = cust_min(dest_off, len);
+        m5_memcpy_elide_free(dest, free_size);
+        dest = (void *)((char *)dest + free_size);
+        len -= free_size;
+    }
+    _mm_mfence();
 }
 
 void *memcpy(void *dest, const void *src, size_t n) {
   ensure_init();
-  const char cannot_optimize = (n <= OPT_THRESHOLD);
 
-  if (cannot_optimize) {
-    //printf("Cannot elide, memcpying\n");
+  if ((n <= OPT_THRESHOLD)) {
     return libc_memcpy(dest, src, n);
   }
 
@@ -183,37 +159,44 @@ void *memcpy(void *dest, const void *src, size_t n) {
     return libc_memcpy(dest, src, n);
   }
 
-  //printf("Eliding\n");
   memcpy_elide_clwb(dest, src, n);
   return dest;
 }
 
 void *malloc(size_t size) {
   ensure_init();
-  if(size < OPT_THRESHOLD)
+  // Avoid recursive calls here by setting flags
+  static bool in_malloc = false;
+  static bool started = false;
+
+  if(!started) {
+    started = true;
     return libc_malloc(size);
+  }
+
+  if(size < OPT_THRESHOLD || in_malloc) {
+    return libc_malloc(size);
+  }
+  
+  in_malloc = true;
+
   fprintf(stderr, "Malloc called size %ld; ", size);
   void *alloc = libc_malloc(size);
   fprintf(stderr, "Alloced %p\n", alloc);
+  allocs[alloc] = size;
+
+  in_malloc = false;
   return (void*)alloc;
 }
 
-//void free(void *ptr) {
-  // uint64_t ptr_bounded = (uint64_t)ptr & PAGE_MASK;
-  // snode *entry = skiplist_search(&addr_list, ptr_bounded);
-
-  // if (entry) {
-  //   if (entry->orig == ptr) {
-  //     // mark for later free
-  //     entry->free = 1;
-  //     return;
-  //   } else {
-  //     skiplist_delete(&addr_list, ptr_bounded);
-  //   }
-  // }
-  //return libc_free(ptr);
-//}
-
+void free(void *ptr) {
+  ensure_init();
+  if(allocs.find(ptr) != allocs.end()) {
+    fprintf(stderr, "Free found alloced ptr %p, size %ld\n", ptr, allocs[ptr]);
+    allocs.erase(ptr);
+  }
+  return libc_free(ptr);
+}
 
 /******************************************************************************/
 /* Helper functions */
@@ -227,40 +210,14 @@ static void *bind_symbol(const char *sym) {
   return ptr;
 }
 
-void *print_stats() {
-  while (1) {
-    LOG_STATS("fast copies: %lu\tslow copies: %lu\tfast writes: %lu\tslow "
-              "writes: %lu\tpage faults: %lu\n",
-              num_fast_copy, num_slow_copy, num_fast_writes, num_slow_writes,
-              num_faults);
-    
-    double total_time = time_search + time_insert + time_other;
-    LOG_STATS("Time: search = %lu (%.2f%%), insert =  %lu (%.2f%%), other =  %lu (%.2f%%)\n",
-              time_search, (double)time_search / total_time * 100.0, 
-              time_insert, (double)time_insert / total_time * 100.0, 
-              time_other, (double)time_other / total_time * 100.0);
-    num_fast_writes = num_slow_writes = num_fast_copy = num_slow_copy =
-        num_faults = 0;
-    time_search = time_insert = time_other = 0;
-    sleep(1);
-  }
-}
-
 static void init(void) {
   fprintf(stderr, "MCSquare start\n");
 
   libc_memcpy = (void* (*)(void*, const void*, long unsigned int))bind_symbol("memcpy");
   libc_malloc = (void* (*)(size_t))bind_symbol("malloc");
+  libc_free   = (void  (*)(void *))bind_symbol("free");
 
   fprintf(stderr, "Memcpy %p, malloc %p\n", libc_memcpy, libc_malloc);
-  //libc_free = bind_symbol("free");
-  
-  pthread_mutex_init(&mu, NULL);
-
-#ifdef UFFD_PROTO
-  num_fast_writes = num_slow_writes = num_fast_copy = num_slow_copy =
-      num_faults = 0;
-#endif
 }
 
 static inline void ensure_init(void) {
