@@ -974,7 +974,7 @@ LSQ::MemElideRequest::finish(const Fault &fault, const RequestPtr &req,
             _inst->translationCompleted(true);
 
             for (i = 0; i < _fault.size() && _fault[i] == NoFault; i++);
-            if (i > 0) {
+            if (i == 2) {
                 _inst->physEffAddr = LSQRequest::req()->getPaddr();
                 _inst->memReqFlags = _reqs[0]->getFlags();
                 if (i == _fault.size()) {
@@ -984,17 +984,17 @@ LSQ::MemElideRequest::finish(const Fault &fault, const RequestPtr &req,
                   _inst->fault = _fault[i];
                   setState(State::PartialFault);
                 }
+                _reqs[0]->_vaddr_dest = LSQRequest::req(0)->getVaddr();
+                _reqs[0]->_paddr_dest = LSQRequest::req(0)->getPaddr();
+                _reqs[0]->_vaddr_src = LSQRequest::req(1)->getVaddr();
+                _reqs[0]->_paddr_src = LSQRequest::req(1)->getPaddr();
+                //printf("MemElide, translated dest %lx to %lx, src %lx to %lx\n", 
+                //       _reqs[0]->_vaddr_dest, _reqs[0]->_paddr_dest, 
+                //       _reqs[0]->_vaddr_src,  _reqs[0]->_paddr_src);
             } else {
-                _inst->fault = _fault[0];
+                _inst->fault = (_fault[0] != NoFault ? _fault[0] : _fault[1]);
                 setState(State::Fault);
             }
-
-            _reqs[0]->_vaddr_dest = LSQRequest::req(0)->getVaddr();
-            _reqs[0]->_paddr_dest = LSQRequest::req(0)->getPaddr();
-            _reqs[0]->_vaddr_src = LSQRequest::req(1)->getVaddr();
-            _reqs[0]->_paddr_src = LSQRequest::req(1)->getPaddr();
-            printf("MemElide, translated dest %lx to %lx, src %lx to %lx\n", 
-                _reqs[0]->_vaddr_dest, _reqs[0]->_vaddr_src, _reqs[0]->_paddr_dest, _reqs[0]->_paddr_src);
         }
 
     }
