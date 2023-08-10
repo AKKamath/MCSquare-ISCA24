@@ -478,16 +478,28 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC && pkt->isRead()) {
         printf("Got redirect packet! %lx %lx, curr_addr: %lx\n", 
             pkt->req->_paddr_dest, pkt->req->_paddr_src, pkt->getAddr());
-        // Convert dest to src and bounce
-        if(pkt->getAddr() == pkt->req->_paddr_dest)
-            pkt->setAddr(pkt->req->_paddr_src & ~(63));
-        // Already src, which means multi-cacheline bounce
-        else if(pkt->getAddr() == (pkt->req->_paddr_src & ~(63)))
-            pkt->setAddr((pkt->req->_paddr_src & ~(63)) + 64);
         
         pkt->cmd = pkt->makeReadCmd(pkt->req);
-        routeTo.erase(route_lookup);
-        return recvTimingReq(pkt, cpu_side_port_id);
+        //routeTo.erase(route_lookup);
+
+        // store the old header delay so we can restore it if needed
+        Tick old_header_delay = pkt->headerDelay;
+
+        // a request sees the frontend and forward latency
+        Tick xbar_delay = (frontendLatency + forwardLatency) * clockPeriod();
+
+        // set the packet header and payload delay
+        calcPacketTiming(pkt, xbar_delay);
+
+        // determine the destination based on the destination address range
+        PortID mem_side_port_id = findPort(pkt->getAddrRange());
+        // since it is a normal request, attempt to send the packet
+        bool success = memSidePorts[mem_side_port_id]->sendTimingReq(pkt);
+        if(!success) {
+            assert(!respLayers[cpu_side_port_id]->tryTiming(src_port));
+            pkt->headerDelay = old_header_delay;
+        }
+        return success;
     }
 
     // test if the crossbar should be considered occupied for the
