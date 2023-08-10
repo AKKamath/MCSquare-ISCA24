@@ -38,3 +38,5 @@ configs/dram/lowp_sweep.cfg
 **.iso
 **.img
 **vmlinux**
+**.so
+**.exe
