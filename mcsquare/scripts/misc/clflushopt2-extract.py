@@ -43,8 +43,8 @@ def extract_cycles(file_path):
 
     return experiment_cycles
 
-sizes=[64, 256, 1024]
-expts=["clflushopt", "clflushopt4", "clflushopt16", "clflushopt64"]
+sizes=[64, 256]
+expts=["clflushopt", "clflushopt4", "clflushopt32", "all_clflushopt", "pg_clflushopt"]
 def main():
     file_path = sys.argv[1]
     experiment_cycles = extract_cycles(file_path)
