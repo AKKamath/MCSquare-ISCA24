@@ -3,7 +3,7 @@
 GEM5_IMG ?= ./os/mcsquare-20.04.final.img
 GEM5_CPU ?= O3CPU#TimingSimpleCPU
 GEM5_KERNEL ?= ./os/vmlinux-5.7
-GEM5_TESTS ?= #seq-access #rand-access #multi-test##script# #seq-access 
+GEM5_TESTS ?= micro/rand-access micro/seq-access#seq-access #rand-access #multi-test##script# #seq-access 
 RESULTS ?= ./results
 
 MNT ?= mnt
@@ -24,7 +24,7 @@ umount_img:
 compile_gem5:
 	cd ..; scons build/X86/gem5.opt
 
-NCPUS ?= 4
+NCPUS ?= 8
 MEM_SIZE ?= 3GB
 MEM_CHAN ?= 8
 
@@ -39,7 +39,7 @@ launch_gem5:
 	done;
 
 TEST ?= ${GEM5_TESTS}
-SCRIPT ?= ./scripts/{TEST}-run.sh
+SCRIPT ?= ./scripts/${TEST}-run.sh
 single_launch_gem5:
 	mkdir -p ${RESULTS}/${TEST};
 	sudo ../build/X86/gem5.opt --debug-flags=PseudoInst -d ${RESULTS}/${TEST} ./fs.py  --fast-forward=1000000000000000000 --mem-size=${MEM_SIZE} --cpu-type=${GEM5_CPU} \
@@ -55,7 +55,7 @@ single_launch_gem5_debug:
 extract_test:
 	python ${SCRIPT} ${RESULTS}/${TEST}/stats.txt > ${RESULTS}/${TEST}_res.txt;
 
-REDIS_TESTS ?= redis redis-zio redis-mc
+REDIS_TESTS ?= redis-64K redis-zio-64K redis-mc-64K redis-mc-fake-64K
 launch_redis:
 	sudo ls; \
 	$(MAKE) compile_gem5; \
@@ -64,7 +64,7 @@ launch_redis:
 	done; \
 	wait;
 
-	$(MAKE) extract_redis TEST="${REDIS_TESTS}"
+	$(MAKE) extract_redis REDIS_TESTS="${REDIS_TESTS}"
 
 extract_redis:
-	python ./scripts/redis/redis-extract.py "${TEST}" > ${RESULTS}/redis.txt;
+	python ./scripts/redis/redis-extract.py "${REDIS_TESTS}" > ${RESULTS}/redis.txt;
