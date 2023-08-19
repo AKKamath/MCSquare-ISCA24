@@ -21,7 +21,7 @@ LD_PRELOAD=${ZIO_BIN} ./redis-server ../redis_ext4.conf &
 sleep 1
 echo "Redis running"
 m5 resetstats
-./redis-benchmark -p 7379 -d 16384 -t set -c 16 -n 1000
+./redis-benchmark -p 7379 -d 65536 -t set -c 16 -n 500
 m5 dumpstats
 echo "Redis done"
 pkill redis-server

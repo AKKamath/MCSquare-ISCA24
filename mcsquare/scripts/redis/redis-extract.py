@@ -32,8 +32,8 @@ def extract_cycles(file_path):
 def main():
     tests = sys.argv[1]
     for test in tests.split():
-        experiment_cycles = extract_cycles("results/redis/" + test)
-        print("%s\t%d" % test, experiment_cycles[0])
+        experiment_cycles = extract_cycles("results/redis/" + test + "/stats.txt")
+        print("%s\t%d" % (test, experiment_cycles[0]))
 
 
 if __name__ == "__main__":

@@ -1,10 +1,12 @@
-ZIO=/home/akkamath/zIO
-ZIO_BIN=${ZIO}/copy_interpose.so
+cd /home/akkamath/gem5-zIO/util/m5
+scons build/x86/out
+cd /home/akkamath/gem5-zIO/mcsquare
 
-pushd ${ZIO};
+pushd lib
 make
-ls
 popd
+
+MC_BIN=/home/akkamath/gem5-zIO/mcsquare/lib/mc_interpose_fake.so
 
 REDIS=/home/akkamath/zIO/benchmarks/redis
 pushd ${REDIS}
@@ -17,7 +19,7 @@ echo "Done compilation"
 m5 exit
 
 cd ${REDIS}/src
-LD_PRELOAD=${ZIO_BIN} ./redis-server ../redis_ext4.conf &
+LD_PRELOAD=${MC_BIN} ./redis-server ../redis_ext4.conf &
 sleep 1
 echo "Redis running"
 m5 resetstats

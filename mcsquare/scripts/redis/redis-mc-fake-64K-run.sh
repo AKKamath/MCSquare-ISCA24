@@ -6,7 +6,7 @@ pushd lib
 make
 popd
 
-MC_BIN=/home/akkamath/gem5-zIO/mcsquare/lib/mc_interpose.so
+MC_BIN=/home/akkamath/gem5-zIO/mcsquare/lib/mc_interpose_fake.so
 
 REDIS=/home/akkamath/zIO/benchmarks/redis
 pushd ${REDIS}
@@ -23,7 +23,7 @@ LD_PRELOAD=${MC_BIN} ./redis-server ../redis_ext4.conf &
 sleep 1
 echo "Redis running"
 m5 resetstats
-./redis-benchmark -p 7379 -d 16384 -t set -c 16 -n 1000
+./redis-benchmark -p 7379 -d 65536 -t set -c 16 -n 500
 m5 dumpstats
 echo "Redis done"
 pkill redis-server
