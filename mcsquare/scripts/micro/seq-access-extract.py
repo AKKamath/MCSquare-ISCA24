@@ -23,14 +23,20 @@ def extract_cycles(file_path):
                 
             max_cycles = max(max_cycles, cycles)
             experiment_number += 1
+        else:
+            match = re.match(r"system\.switch_cpus\.numCycles\s+(\d+)", line.strip())
+            if match:
+                max_cycles = int(match.group(1))
+                experiment_cycles.append(max_cycles)
+                experiment_number += 1
     
     # Append the max cycles for the last experiment
     experiment_cycles.append(max_cycles)
 
     return experiment_cycles
 
-expts=["clwb", "memcpy", "zIO"]
-sizes=["10%", "25%", "50%", "100%"]
+expts=["MCSquare", "Memcpy", "zIO"]
+sizes=["0%", "12.5%", "25%", "50%", "100%", "200%"]
 def main():
     file_path = sys.argv[1]
     experiment_cycles = extract_cycles(file_path)

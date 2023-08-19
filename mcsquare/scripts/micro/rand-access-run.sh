@@ -40,12 +40,12 @@ static uint64_t lfsr_fast(uint64_t lfsr)
 #define TEST_OP(OPERATION, dest, src, size, accesses) \
     reset_op(dest, src, size); \
     _mm_mfence();  \
-    OPERATION(dest, src, size); \
-    _mm_mfence(); \
     printf(\"Dest: %lu Src: %lu\n\", *dest, *src); \
     _mm_mfence(); \
     m5_reset_stats(0, 0); \
+    OPERATION(dest, src, size); \
     random_test(dest, src, size, accesses); \
+    _mm_mfence(); \
     m5_dump_stats(0, 0); \
     memcpy_elide_free(dest, size);
 
@@ -109,25 +109,44 @@ void memcpy_elide_clwb(void* dest, void* src, uint64_t len)
         _mm_clwb( (void*)temp_src );
         temp_src += CL_SIZE;
     }
+    uint64_t temp_dest = ((uint64_t)dest & ~((uint64_t)4095));
+    while(temp_dest < (uint64_t)dest + len) {
+        _mm_clwb( (void*)temp_dest );
+        temp_dest += PAGE_SIZE;
+    }
     _mm_mfence();
     // Cacheline-align dest
     uint64_t left_fringe = CL_SIZE - ((uint64_t)dest & (CL_SIZE - 1));
+    temp_src = (uint64_t)src;
     if(left_fringe < CL_SIZE) {
         memcpy(dest, src, left_fringe);
         dest = (void *)((char *)dest + left_fringe);
-        src = (void *)((char *)src + left_fringe);
+        temp_src = ((uint64_t)src + left_fringe);
+        len -= left_fringe;
     }
     while(len > 0) {
         // Calculate remaining size in page for src and dest
-        uint64_t src_off = PAGE_SIZE - ((uint64_t)src & (PAGE_SIZE - 1));
+        uint64_t src_off = PAGE_SIZE - ((uint64_t)temp_src & (PAGE_SIZE - 1));
         uint64_t dest_off = PAGE_SIZE - ((uint64_t)dest & (PAGE_SIZE - 1));
         // Pick minimum size left as elide_size
         uint64_t elide_size = cust_min(cust_min(src_off, dest_off), len);
-        m5_memcpy_elide(dest, src, elide_size);
+        if(elide_size < CL_SIZE) {
+          if(len >= CL_SIZE)
+            elide_size = CL_SIZE;
+          else
+            elide_size = len;
+          memcpy(dest, (void*)temp_src, elide_size);
+        }
+        else {
+          // Make elide size a multiple of 64
+          elide_size &= (~63);
+          m5_memcpy_elide(dest, (void*)temp_src, elide_size);
+        }
         dest = (void *)((char *)dest + elide_size);
-        src = (void *)((char *)src + elide_size);
+        temp_src = (temp_src + elide_size);
         len -= elide_size;
     }
+    _mm_mfence();
 }
 
 void memcpy_elide_free(void* dest, uint64_t len)
@@ -148,17 +167,18 @@ echo "
 int main(int argc, char *argv[])
 {
     size_t size = SIZE;
-    uint64_t *test1 = (uint64_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
-        MAP_POPULATE | MAP_ANONYMOUS | MAP_SHARED, -1, 0);
-    uint64_t *test2 = (uint64_t*)mmap(NULL, size, PROT_READ | PROT_WRITE, 
-        MAP_POPULATE | MAP_ANONYMOUS | MAP_SHARED, -1, 0);
+    uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size + 16);
+    uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
+    test1 = (uint64_t*)((uint64_t)test1 + 16);
     init_op(test2, test1, size);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
-    TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 10);
+    TEST_OP(memcpy_elide_clwb, test2, test1, size, 0);
+    TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 8);
     TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 4);
     TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 2);
     TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES);
+    TEST_OP(memcpy_elide_clwb, test2, test1, size, (2 * ACCESSES));
     return 0;
 }
 " > test_clwb.cpp;
@@ -168,15 +188,18 @@ echo "
 int main(int argc, char *argv[])
 {
     size_t size = SIZE;
-    uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
+    uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size + 16);
     uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
+    test1 = (uint64_t*)((uint64_t)test1 + 16);
     init_op(test2, test1, size);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
-    TEST_OP(memcpy, test2, test1, size, ACCESSES / 10);
+    TEST_OP(memcpy, test2, test1, size, 0);
+    TEST_OP(memcpy, test2, test1, size, ACCESSES / 8);
     TEST_OP(memcpy, test2, test1, size, ACCESSES / 4);
     TEST_OP(memcpy, test2, test1, size, ACCESSES / 2);
     TEST_OP(memcpy, test2, test1, size, ACCESSES);
+    TEST_OP(memcpy, test2, test1, size, (2 * ACCESSES));
     return 0;
 }
 " > test_memcpy.cpp;
