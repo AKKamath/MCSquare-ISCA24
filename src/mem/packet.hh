@@ -296,6 +296,10 @@ class Packet : public Printable
     typedef uint32_t FlagsType;
     typedef gem5::Flags<FlagsType> Flags;
 
+    uint64_t mc_size = -1;
+    uint64_t mc_src_offset = -1;
+    uint64_t mc_dest_offset = -1;
+
   private:
     enum : FlagsType
     {

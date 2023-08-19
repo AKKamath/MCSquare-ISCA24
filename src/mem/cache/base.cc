@@ -1255,14 +1255,14 @@ BaseCache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
             if(blk)
                 invalidateBlock(blk);
         }
-        // Invalidate source only for MEM_ELIDE
-        if(pkt->req->getFlags() & Request::MEM_ELIDE) {
+        // Invalidate source only for MEM_ELIDE - maybe not required?
+        /*if(pkt->req->getFlags() & Request::MEM_ELIDE) {
             for(int i = 0; i < pkt->req->getSize(); i += blkSize) {
                 CacheBlk *blk = tags->findBlock(pkt->req->_paddr_src + i, pkt->isSecure());
                 if(blk)
                     invalidateBlock(blk);
             }
-        }
+        }*/
         return false;
     }
 

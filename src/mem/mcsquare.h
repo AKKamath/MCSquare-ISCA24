@@ -65,8 +65,9 @@ class MCSquare : public SimObject {
 
     void insertEntry(Addr dest, Addr src, uint64_t size);
     void deleteEntry(Addr dest, uint64_t size);
-    void splitEntry(Addr splitAddr, uint64_t size);
+    void splitEntry(PacketPtr pkt);
     Types contains(PacketPtr pkt);
+    bool bounceAddr(PacketPtr pkt);
 
     Tick getPenalty() { return tbl_acc_lat; }
 };

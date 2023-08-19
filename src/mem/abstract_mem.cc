@@ -444,13 +444,8 @@ AbstractMemory::access(PacketPtr pkt)
         }
         if (pmemAddr) {
             if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
-                if(pkt->getAddr() <= pkt->req->_paddr_src)
-                    pkt->setData(host_addr, 0, 
-                                 pkt->req->_paddr_src - pkt->getAddr(), 
-                                 64 - (pkt->req->_paddr_src & 63));
-                else
-                    pkt->setData(host_addr, 64 - (pkt->req->_paddr_src & 63), 0, 
-                                 (pkt->req->_paddr_src & 63));
+                pkt->setData(host_addr, pkt->mc_dest_offset, 
+                             pkt->mc_src_offset, pkt->mc_size);
             } else {
                 pkt->setData(host_addr);
             }

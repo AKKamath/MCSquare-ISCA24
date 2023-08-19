@@ -456,14 +456,23 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
     }
 
     if(MCSquare::Types type = mcsquare->contains(pkt)) {
-        // TODO: Atomic
         if(pkt->isWrite()) {
-            // Read from dest will be taken care of when responding.
-            // We need to only handle writes to src/dest here
-            // TODO: Write to src, write to dest
+            // TODO: Write to src
             if(type == MCSquare::Types::TYPE_DEST) {
-                mcsquare->splitEntry(pkt->getAddr(), pkt->getSize());
+                mcsquare->splitEntry(pkt);
                 printf("Found a write to dest %lx!\n", pkt->getAddr());
+            } else if(type == MCSquare::Types::TYPE_SRC) {
+                // TODO
+                printf("Err: Write to src %lx\n", pkt->getAddr());
+                //fflush(stdout);
+                //assert(false);
+                pkt->writeData(src_map[pkt->getAddr()]);
+                if(pkt->needsResponse()) {
+                    printf("Err: Write to src %lx needs response\n", pkt->getAddr());
+                    assert(false);
+                }
+                //accessAndRespond(pkt, 100000, dram);
+                return true;
             }
         }
         // Read to destination. Add table access latency then bounce packet.
@@ -682,16 +691,30 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
              "Can't handle address range for packet %s\n", pkt->print());
     mem_intr->access(pkt);
 
+    if(src_map.find(pkt->getAddr()) != src_map.end() && 
+        !(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC)) {
+        uint8_t *ptr = src_map[pkt->getAddr()];
+        if(pkt->isWrite())
+            pkt->writeData(ptr);
+        else if(pkt->isRead()) {
+            pkt->setData(ptr);
+        }
+    }
+
     if(pkt->isRead() && mcsquare->contains(pkt) == MCSquare::Types::TYPE_DEST) {
+        mcsquare->bounceAddr(pkt);
         // Add redirect flag to redirect
-        printf("Setting redirect packet! %lx %lx\n", pkt->req->_paddr_dest, pkt->req->_paddr_src);
+        printf("Setting redirect packet! %lx %lx %lx\n", 
+               pkt->req->_paddr_dest, pkt->req->_paddr_src, pkt->getAddr());
         pkt->req->setFlags(Request::MEM_ELIDE_REDIRECT_SRC);
     } else if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
-        // We have read the appropriate data. Clear flag.
-        // TODO: Src lies across multiple cachelines, prepare next src cacheline
-        printf("Clearing redirect packet! %lx %lx\n", pkt->req->_paddr_dest, pkt->req->_paddr_src);
-        pkt->req->clearFlags(Request::MEM_ELIDE_REDIRECT_SRC);
-        pkt->setAddr(pkt->req->_paddr_dest);
+        bool complete = mcsquare->bounceAddr(pkt);
+        if(complete) {
+            // We have read the appropriate data. Clear flag.
+            printf("Clearing redirect packet! %lx %lx, addr %lx\n", 
+                pkt->req->_paddr_dest, pkt->req->_paddr_src, pkt->getAddr());
+            pkt->req->clearFlags(Request::MEM_ELIDE_REDIRECT_SRC);
+        }
     }
 
     // turn packet around to go back to requestor if response expected
