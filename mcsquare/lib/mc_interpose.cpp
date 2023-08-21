@@ -1,6 +1,5 @@
 /*
- * Copyright 2019 University of Washington, Max Planck Institute for
- * Software Systems, and The University of Texas at Austin
+ * Copyright 2023 University of Washington
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -43,7 +42,31 @@ static void *(*libc_memcpy)(void *dest, const void *src, size_t n);
 //static void (*libc_free)(void *ptr) = NULL;
 //static int (*libc_munmap)(void *addr, size_t length) = NULL;
 
-//std::unordered_map<void *, size_t> allocs;
+bool init_done = false;
+uint64_t elisions = 0;
+
+/******************************************************************************/
+/* Helper functions */
+
+static void *bind_symbol(const char *sym) {
+  void *ptr;
+  if ((ptr = dlsym(RTLD_NEXT, sym)) == NULL) {
+    fprintf(stderr, "flextcp socket interpose: dlsym failed (%s)\n", sym);
+    abort();
+  }
+  return ptr;
+}
+
+static void init(void) {
+  fprintf(stderr, "MCSquare start\n");
+
+  libc_memcpy = (void* (*)(void*, const void*, long unsigned int))bind_symbol("memcpy");
+  //libc_malloc = (void* (*)(size_t))bind_symbol("malloc");
+  //libc_free   = (void  (*)(void *))bind_symbol("free");
+  //libc_munmap = (int   (*)(void *addr, size_t length))bind_symbol("munmap");
+
+  //fprintf(stderr, "Memcpy %p, malloc %p\n", libc_memcpy, libc_malloc);
+}
 
 static void memcpy_elide_clwb(void* dest, const void* src, uint64_t len)
 {
@@ -115,6 +138,9 @@ static void memcpy_elide_free(void* dest, uint64_t len)
 }
 
 void *memcpy(void *dest, const void *src, size_t n) {
+  if(!init_done)
+    init();
+
   if ((n <= OPT_THRESHOLD)) {
     return libc_memcpy(dest, src, n);
   }
@@ -167,34 +193,8 @@ void free(void *ptr) {
   return libc_free(ptr);
 }*/
 
-/******************************************************************************/
-/* Helper functions */
-
-static void *bind_symbol(const char *sym) {
-  void *ptr;
-  if ((ptr = dlsym(RTLD_NEXT, sym)) == NULL) {
-    fprintf(stderr, "flextcp socket interpose: dlsym failed (%s)\n", sym);
-    abort();
-  }
-  return ptr;
-}
-
-static void init(void) {
-  fprintf(stderr, "MCSquare start\n");
-
-  libc_memcpy = (void* (*)(void*, const void*, long unsigned int))bind_symbol("memcpy");
-  //libc_malloc = (void* (*)(size_t))bind_symbol("malloc");
-  //libc_free   = (void  (*)(void *))bind_symbol("free");
-  //libc_munmap = (int   (*)(void *addr, size_t length))bind_symbol("munmap");;
-
-  //fprintf(stderr, "Memcpy %p, malloc %p\n", libc_memcpy, libc_malloc);
-}
-
 struct setup_handler {
   ~setup_handler() {
     memcpy_elide_free(this, 1);
-  }
-  setup_handler() {
-    init();
   }
 } dummy;

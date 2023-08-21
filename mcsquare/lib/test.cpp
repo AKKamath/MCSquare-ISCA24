@@ -22,7 +22,7 @@ int main() {
     src = malloc(MAX_SIZE);
     for(int size = 4096; size <= MAX_SIZE; size *= 2) {
         memcpy(dest, src, size);
-        printf("%p %p %lu\n", dest, src, size);
+        printf("%p %p %d\n", dest, src, size);
     }
     void *addr = mmap(NULL, MAX_SIZE, PROT_READ,
                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);

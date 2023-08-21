@@ -41,9 +41,32 @@
 static void *(*libc_memcpy)(void *dest, const void *src, size_t n);
 //static void *(*libc_malloc)(size_t size) = NULL;
 //static void (*libc_free)(void *ptr) = NULL;
-//static int (*libc_munmap)(void *addr, size_t length) = NULL;
 
-//std::unordered_map<void *, size_t> allocs;
+bool init_done = false;
+
+/******************************************************************************/
+/* Helper functions */
+
+static void *bind_symbol(const char *sym) {
+  void *ptr;
+  if ((ptr = dlsym(RTLD_NEXT, sym)) == NULL) {
+    fprintf(stderr, "flextcp socket interpose: dlsym failed (%s)\n", sym);
+    abort();
+  }
+  return ptr;
+}
+
+static void init(void) {
+  fprintf(stderr, "MCSquare start\n");
+
+  libc_memcpy = (void* (*)(void*, const void*, long unsigned int))bind_symbol("memcpy");
+  //libc_malloc = (void* (*)(size_t))bind_symbol("malloc");
+  //libc_free   = (void  (*)(void *))bind_symbol("free");
+  //libc_munmap = (int   (*)(void *addr, size_t length))bind_symbol("munmap");;
+
+  //fprintf(stderr, "Memcpy %p, malloc %p\n", libc_memcpy, libc_malloc);
+  init_done = true;
+}
 
 static void memcpy_elide_clwb(void* dest, const void* src, uint64_t len)
 {
@@ -84,7 +107,8 @@ static void memcpy_elide_clwb(void* dest, const void* src, uint64_t len)
           // Make elide size a multiple of 64
           elide_size &= (~63);
           //fprintf(stderr, "Elide %p 0x%lx %lu\n", dest, temp_src, elide_size);
-          m5_memcpy_elide(dest, (void*)temp_src, elide_size);
+          libc_memcpy(dest, (void*)temp_src, elide_size);
+          //m5_memcpy_elide(dest, (void*)temp_src, elide_size);
         }
         dest = (void *)((char *)dest + elide_size);
         temp_src = (temp_src + elide_size);
@@ -106,8 +130,8 @@ static void memcpy_elide_free(void* dest, uint64_t len)
         uint64_t dest_off = PAGE_SIZE - ((uint64_t)dest & (PAGE_SIZE - 1));
         // Pick minimum size left as elide_size
         uint64_t free_size = cust_min(dest_off, len);
-        m5_memcpy_elide_free(dest, free_size);
-        //fprintf(stderr, "Freed %p (%lu)\n", dest, free_size);
+        //m5_memcpy_elide_free(dest, free_size);
+        fprintf(stderr, "Freed %p (%lu)\n", dest, free_size);
         dest = (void *)((char *)dest + free_size);
         len -= free_size;
     }
@@ -115,6 +139,8 @@ static void memcpy_elide_free(void* dest, uint64_t len)
 }
 
 void *memcpy(void *dest, const void *src, size_t n) {
+  if(!init_done)
+    init();
   if ((n <= OPT_THRESHOLD)) {
     return libc_memcpy(dest, src, n);
   }
@@ -127,73 +153,41 @@ void *memcpy(void *dest, const void *src, size_t n) {
     }
     return libc_memcpy(dest, src, n);
   }
-  return libc_memcpy(dest, src, n);
-}
+  memcpy_elide_clwb(dest, src, n);
+  return dest;
+} 
 /*
+void* operator new(std::size_t count) {
+  fprintf(stderr, "Called new1\n");
+}
+void* operator new(std::size_t count, const std::nothrow_t& tag) noexcept {
+  fprintf(stderr, "Called new2\n");
+}
+void* operator new(std::size_t count, std::align_val_t al) {
+  fprintf(stderr, "Called new3\n");
+}  // C++17
+void* operator new(std::size_t count,
+                   std::align_val_t al, const std::nothrow_t&) noexcept {
+  fprintf(stderr, "Called new4\n");
+}  // C++17
+
 void *malloc(size_t size) {
-  ensure_init();
-  // Avoid recursive calls here by setting flags
-  static bool in_malloc = false;
-  static bool started = false;
-
-  if(!started) {
-    started = true;
-    return libc_malloc(size);
-  }
-
-  if(size < OPT_THRESHOLD || in_malloc) {
-    return libc_malloc(size);
-  }
-  
-  in_malloc = true;
-
+  if(!init_done)
+    init();
   fprintf(stderr, "Malloc called size %ld; ", size);
-  void *alloc = libc_malloc(size);
-  fprintf(stderr, "Alloced %p\n", alloc);
-  allocs[alloc] = size;
-
-  in_malloc = false;
-  return (void*)alloc;
+  return libc_malloc(size);
 }
 
 void free(void *ptr) {
-  ensure_init();
-  if(allocs.find(ptr) != allocs.end()) {
-    //fprintf(stderr, "Free found alloced ptr %p, size %ld\n", ptr, allocs[ptr]);
-    memcpy_elide_free(ptr, allocs[ptr]);
-    allocs.erase(ptr);
-  }
+  if(!init_done)
+    init();
+  fprintf(stderr, "Called free\n");
   return libc_free(ptr);
 }*/
 
-/******************************************************************************/
-/* Helper functions */
-
-static void *bind_symbol(const char *sym) {
-  void *ptr;
-  if ((ptr = dlsym(RTLD_NEXT, sym)) == NULL) {
-    fprintf(stderr, "flextcp socket interpose: dlsym failed (%s)\n", sym);
-    abort();
-  }
-  return ptr;
-}
-
-static void init(void) {
-  fprintf(stderr, "MCSquare start\n");
-
-  libc_memcpy = (void* (*)(void*, const void*, long unsigned int))bind_symbol("memcpy");
-  //libc_malloc = (void* (*)(size_t))bind_symbol("malloc");
-  //libc_free   = (void  (*)(void *))bind_symbol("free");
-  //libc_munmap = (int   (*)(void *addr, size_t length))bind_symbol("munmap");;
-
-  //fprintf(stderr, "Memcpy %p, malloc %p\n", libc_memcpy, libc_malloc);
-}
 
 struct setup_handler {
   ~setup_handler() {
     memcpy_elide_free(this, 1);
-  }
-  setup_handler() {
-    init();
   }
 } dummy;
