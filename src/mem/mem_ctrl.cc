@@ -421,9 +421,11 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
     prevArrival = curTick();
 
     if(isMCSquare(pkt)) {
-        if(pkt->req->getFlags() & Request::MEM_ELIDE)
+        if(pkt->req->getFlags() & Request::MEM_ELIDE) {
             mcsquare->insertEntry(pkt->getAddr(), 
                 pkt->req->_paddr_src, pkt->req->getSize());
+            mcsquare->stats.sizeElided += pkt->req->getSize();
+        }
         else if(pkt->req->getFlags() & Request::MEM_ELIDE_FREE)
             mcsquare->deleteEntry(pkt->getAddr(), pkt->req->getSize());
         // See if we're responsible for sending a response back
@@ -460,28 +462,33 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
             // TODO: Write to src
             if(type == MCSquare::Types::TYPE_DEST) {
                 mcsquare->splitEntry(pkt);
-                printf("Found a write to dest %lx!\n", pkt->getAddr());
+                DPRINTF(MCSquare, "Found a write to dest %lx!\n", pkt->getAddr());
+                mcsquare->stats.destWriteSize += pkt->getSize();
             } else if(type == MCSquare::Types::TYPE_SRC) {
                 // TODO
-                printf("Err: Write to src %lx\n", pkt->getAddr());
+                DPRINTF(MCSquare, "Err: Write to src %lx\n", pkt->getAddr());
                 //fflush(stdout);
                 //assert(false);
                 pkt->writeData(src_map[pkt->getAddr()]);
                 if(pkt->needsResponse()) {
-                    printf("Err: Write to src %lx needs response\n", pkt->getAddr());
+                    DPRINTF(MCSquare, "Err: Write to src %lx needs response\n", pkt->getAddr());
                     assert(false);
                 }
+                mcsquare->stats.srcWriteSize += pkt->getSize();
                 //accessAndRespond(pkt, 100000, dram);
                 return true;
             }
         }
         // Read to destination. Add table access latency then bounce packet.
-        if((pkt->isRead() && 
-            type == MCSquare::Types::TYPE_DEST && 
-            !(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC))) {
-            printf("Found a read to dest %lx, applying elision penalty\n", pkt->getAddr());
-            accessAndRespond(pkt, mcsquare->getPenalty(), dram);
-            return true;
+        if(pkt->isRead() && !(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC)) {
+            if(type == MCSquare::Types::TYPE_DEST) {
+                DPRINTF(MCSquare, "Found a read to dest %lx, applying elision penalty\n", pkt->getAddr());
+                mcsquare->stats.destReadSize += pkt->getSize();
+                accessAndRespond(pkt, mcsquare->getPenalty(), dram);
+                return true;
+            } else if(type == MCSquare::Types::TYPE_SRC) {
+                mcsquare->stats.srcReadSize += pkt->getSize();
+            }
         }
     }
 
@@ -704,14 +711,14 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
     if(pkt->isRead() && mcsquare->contains(pkt) == MCSquare::Types::TYPE_DEST) {
         mcsquare->bounceAddr(pkt);
         // Add redirect flag to redirect
-        printf("Setting redirect packet! %lx %lx %lx\n", 
+        DPRINTF(MCSquare, "Setting redirect packet! %lx %lx %lx\n", 
                pkt->req->_paddr_dest, pkt->req->_paddr_src, pkt->getAddr());
         pkt->req->setFlags(Request::MEM_ELIDE_REDIRECT_SRC);
     } else if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
         bool complete = mcsquare->bounceAddr(pkt);
         if(complete) {
             // We have read the appropriate data. Clear flag.
-            printf("Clearing redirect packet! %lx %lx, addr %lx\n", 
+            DPRINTF(MCSquare, "Clearing redirect packet! %lx %lx, addr %lx\n", 
                 pkt->req->_paddr_dest, pkt->req->_paddr_src, pkt->getAddr());
             pkt->req->clearFlags(Request::MEM_ELIDE_REDIRECT_SRC);
         }

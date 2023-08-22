@@ -16,6 +16,7 @@
 #include "sim/eventq.hh"
 #include "sim/sim_object.hh"
 #include "params/MCSquare.hh"
+#include "debug/MCSquare.hh"
 
 namespace gem5
 {
@@ -59,7 +60,8 @@ class MCSquare : public SimObject {
     };
 
     MCSquare(const MCSquareParams &params) : SimObject(params),
-      max_tbl_sz(params.table_size), tbl_acc_lat(params.table_penalty) {
+      max_tbl_sz(params.table_size), tbl_acc_lat(params.table_penalty), 
+      stats(*this) {
         printf("Created MCSquare with %d size for %lu tiks\n", max_tbl_sz, tbl_acc_lat);
       }
 
@@ -70,6 +72,25 @@ class MCSquare : public SimObject {
     bool bounceAddr(PacketPtr pkt);
 
     Tick getPenalty() { return tbl_acc_lat; }
+
+    struct CtrlStats : public statistics::Group
+    {
+        CtrlStats(MCSquare &ctrl);
+
+        void regStats() override;
+
+        MCSquare &ctrl;
+
+        // All statistics that the model needs to capture
+        statistics::Scalar maxEntries;
+        statistics::Scalar sizeElided;
+        statistics::Scalar destReadSize;
+        statistics::Scalar destWriteSize;
+        statistics::Scalar srcReadSize;
+        statistics::Scalar srcWriteSize;
+    };
+
+    CtrlStats stats;
 };
 
 } // namespace memory

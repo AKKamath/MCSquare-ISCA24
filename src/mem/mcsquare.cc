@@ -34,13 +34,13 @@ MCSquare::insertEntry(Addr dest, Addr src, uint64_t size)
     for(auto i = m_table.begin(); i != m_table.end(); ++i) {
         // See if we can merge entries first
         if(i->src + i->size == src && i->dest + i->size == dest) {
-            printf("%s: Merged: dest - %lx, src - %lx, size - %lu\n", 
+            DPRINTF(MCSquare, "%s: Merged: dest - %lx, src - %lx, size - %lu\n", 
                    name().c_str(), dest, src, size);
             i->size += size;
             return;
         }
         if(src + size == i->src && dest + size == i->dest) {
-            printf("%s: Merged: dest - %lx, src - %lx, size - %lu\n", 
+            DPRINTF(MCSquare, "%s: Merged: dest - %lx, src - %lx, size - %lu\n", 
                    name().c_str(), dest, src, size);
             i->dest = dest;
             i->src  = src;
@@ -101,7 +101,7 @@ MCSquare::insertEntry(Addr dest, Addr src, uint64_t size)
                 uint64_t temp_src = i->src + offset;
                 uint64_t temp_size = std::min(size, i->size - offset);
 
-                printf("%s: Redirected src: dest - %lx, (og src %lx) "
+                DPRINTF(MCSquare, "%s: Redirected src: dest - %lx, (og src %lx) "
                        "now src - %lx, size - %lu\n", 
                        name().c_str(), dest, src, temp_src, temp_size);
                 m_table.push_back(TableEntry(dest, temp_src, temp_size));
@@ -123,7 +123,8 @@ MCSquare::insertEntry(Addr dest, Addr src, uint64_t size)
     }
 
     m_table.push_back(TableEntry(dest, src, size));
-    printf("%s: Added: dest - %lx, src - %lx, size - %lu\n", 
+    stats.maxEntries = std::max((size_t)stats.maxEntries.value(), m_table.size());
+    DPRINTF(MCSquare, "%s: Added: dest - %lx, src - %lx, size - %lu\n", 
            name().c_str(), dest, src, size);
 }
 
@@ -131,7 +132,7 @@ void
 MCSquare::deleteEntry(Addr dest, uint64_t size)
 {
     if(size == (uint64_t)1) {
-        printf("%s: Clearing elision table\n", name().c_str());
+        DPRINTF(MCSquare, "Clearing elision table of %ld entries\n", m_table.size());
         m_table.clear();
         return;
     }
@@ -141,7 +142,7 @@ MCSquare::deleteEntry(Addr dest, uint64_t size)
             if(dest <= i->dest) {
                 // See if this entry is subsumed by this operation
                 if(dest + size >= i->dest + i->size) {
-                    printf("%s: Deleted: dest - %lx, size - %lu\n", 
+                    DPRINTF(MCSquare, "%s: Deleted: dest - %lx, size - %lu\n", 
                         name().c_str(), i->dest, i->size);
                     auto entry = i;
                     i--;
@@ -153,7 +154,7 @@ MCSquare::deleteEntry(Addr dest, uint64_t size)
                     i->dest += offset;
                     i->src  += offset;
                     i->size -= offset;
-                    printf("%s: Downsized1: dest - %lx, size - %lu\n", 
+                    DPRINTF(MCSquare, "%s: Downsized1: dest - %lx, size - %lu\n", 
                         name().c_str(), i->dest, i->size);
                     continue;
                 }
@@ -162,7 +163,7 @@ MCSquare::deleteEntry(Addr dest, uint64_t size)
                 if(dest + size >= i->dest + i->size) {
                     // If so, cut entry to point of intersection
                     i->size = dest - i->dest;
-                    printf("%s: Downsized2: dest - %lx, size - %lu\n", 
+                    DPRINTF(MCSquare, "%s: Downsized2: dest - %lx, size - %lu\n", 
                         name().c_str(), i->dest, i->size);
                     continue;
                 } else {
@@ -173,7 +174,7 @@ MCSquare::deleteEntry(Addr dest, uint64_t size)
 
                     // 1. Cut down current entry to left fringe
                     i->size = dest - i->dest;
-                    printf("%s: Downsized3: dest - %lx, size - %lu\n", 
+                    DPRINTF(MCSquare, "%s: Downsized3: dest - %lx, size - %lu\n", 
                         name().c_str(), i->dest, i->size);
                     
                     // 2. Add current entry remaining right fringe
@@ -214,7 +215,7 @@ MCSquare::contains(PacketPtr pkt)
         if(pkt->getAddrRange().intersects(RangeSize(i->src, i->size))) {
             if(pkt->req->_paddr_src == 0)
                 pkt->req->_paddr_src = pkt->getAddr();
-            //printf("Packet (%lx, %lu) intersects src entry: "
+            //DPRINTF(MCSquare, "Packet (%lx, %lu) intersects src entry: "
             //    "dest %lx, src %lx, size %lu\n", pkt->getAddr(), pkt->getSize(),
             //    i->dest, i->src, i->size);
             return Types::TYPE_SRC;
@@ -224,7 +225,7 @@ MCSquare::contains(PacketPtr pkt)
         if(pkt->getAddrRange().intersects(RangeSize(i->dest, i->size))) {
             if(pkt->req->_paddr_dest == 0)
                 pkt->req->_paddr_dest = pkt->getAddr();
-            printf("Packet (%lx, %u) intersects entry: "
+            DPRINTF(MCSquare, "Packet (%lx, %u) intersects entry: "
                 "dest %lx, src %lx, size %lu\n", pkt->getAddr(), pkt->getSize(),
                 i->dest, i->src, i->size);
             return Types::TYPE_DEST;
@@ -264,6 +265,30 @@ MCSquare::bounceAddr(PacketPtr pkt)
     fflush(stdout);
     assert(false);
     return true;
+}
+
+MCSquare::CtrlStats::CtrlStats(MCSquare &_ctrl)
+    : statistics::Group(&_ctrl),
+    ctrl(_ctrl),
+    ADD_STAT(maxEntries, statistics::units::Count::get(),
+             "Maximum size of elision table during simulation"),
+    ADD_STAT(sizeElided, statistics::units::Count::get(),
+             "Total size (in bytes) of data elided"),
+    ADD_STAT(destReadSize, statistics::units::Count::get(),
+             "Amount (in bytes) of destination data read"),
+    ADD_STAT(destWriteSize, statistics::units::Count::get(),
+             "Amount (in bytes) of destination data written"),
+    ADD_STAT(srcReadSize, statistics::units::Count::get(),
+             "Amount (in bytes) of src data read"),
+    ADD_STAT(srcWriteSize, statistics::units::Count::get(),
+             "Amount (in bytes) of src data written")
+{
+}
+
+void
+MCSquare::CtrlStats::regStats()
+{
+    using namespace statistics;
 }
 
 } // namespace memory

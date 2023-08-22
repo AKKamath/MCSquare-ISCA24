@@ -476,9 +476,6 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     assert(cpu_side_port_id < respLayers.size());
 
     if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC && pkt->isRead()) {
-        printf("Got redirect packet! %lx %lx, curr_addr: %lx\n", 
-            pkt->req->_paddr_dest, pkt->req->_paddr_src, pkt->getAddr());
-        
         pkt->cmd = pkt->makeReadCmd(pkt->req);
         //routeTo.erase(route_lookup);
 
