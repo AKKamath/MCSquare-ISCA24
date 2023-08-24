@@ -33,13 +33,14 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <unordered_map>
+#include <malloc.h>
 #include "mcsquare.h"
 
 #define OPT_THRESHOLD 1023
 
 static void *(*libc_memcpy)(void *dest, const void *src, size_t n);
 //static void *(*libc_malloc)(size_t size) = NULL;
-//static void (*libc_free)(void *ptr) = NULL;
+static void (*libc_free)(void *ptr) = NULL;
 //static int (*libc_munmap)(void *addr, size_t length) = NULL;
 
 bool init_done = false;
@@ -62,10 +63,11 @@ static void init(void) {
 
   libc_memcpy = (void* (*)(void*, const void*, long unsigned int))bind_symbol("memcpy");
   //libc_malloc = (void* (*)(size_t))bind_symbol("malloc");
-  //libc_free   = (void  (*)(void *))bind_symbol("free");
+  libc_free   = (void  (*)(void *))bind_symbol("free");
   //libc_munmap = (int   (*)(void *addr, size_t length))bind_symbol("munmap");
 
   //fprintf(stderr, "Memcpy %p, malloc %p\n", libc_memcpy, libc_malloc);
+  init_done = true;
 }
 
 static void memcpy_elide_clwb(void* dest, const void* src, uint64_t len)
@@ -123,7 +125,6 @@ static void memcpy_elide_free(void* dest, uint64_t len)
         _mm_clwb( (void*)temp_dest );
         temp_dest += PAGE_SIZE;
     }
-    _mm_mfence();
     while(len > 0) {
         // Calculate remaining size in page for dest
         uint64_t dest_off = PAGE_SIZE - ((uint64_t)dest & (PAGE_SIZE - 1));
@@ -134,7 +135,6 @@ static void memcpy_elide_free(void* dest, uint64_t len)
         dest = (void *)((char *)dest + free_size);
         len -= free_size;
     }
-    _mm_mfence();
 }
 
 void *memcpy(void *dest, const void *src, size_t n) {
@@ -181,17 +181,19 @@ void *malloc(size_t size) {
 
   in_malloc = false;
   return (void*)alloc;
-}
+}*/
 
 void free(void *ptr) {
-  ensure_init();
-  if(allocs.find(ptr) != allocs.end()) {
-    //fprintf(stderr, "Free found alloced ptr %p, size %ld\n", ptr, allocs[ptr]);
-    memcpy_elide_free(ptr, allocs[ptr]);
-    allocs.erase(ptr);
-  }
+  if(!init_done)
+    init();
+  size_t size = malloc_usable_size(ptr);
+  
+  if(size <= OPT_THRESHOLD)
+    return libc_free(ptr);
+
+  memcpy_elide_free(ptr, size);
   return libc_free(ptr);
-}*/
+}
 
 struct setup_handler {
   ~setup_handler() {
