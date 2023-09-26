@@ -666,9 +666,10 @@ let {{
                        has_data=False)
     defineMicroStoreOp('Clflushopt', 'Mem = 0;',
                        mem_flags="Request::CLEAN | Request::INVALIDATE" +
-                       " | Request::DST_POC", has_data=False)
+                       " | Request::NO_TSO | Request::DST_POC", has_data=False)
     defineMicroStoreOp('Clwb', 'Mem = 0;', has_data=False,
-                       mem_flags="Request::CLEAN | Request::DST_POC")
+                       mem_flags="Request::CLEAN | Request::DST_POC " +
+                       " | Request::NO_TSO")
 
     def defineMicroStoreSplitOp(mnemonic, code,
                                 completeCode="", mem_flags="0"):

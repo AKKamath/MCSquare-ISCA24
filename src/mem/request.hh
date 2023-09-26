@@ -152,6 +152,8 @@ class Request
          * cache block.  There is no need for a read/modify/write
          */
         CACHE_BLOCK_ZERO            = 0x00010000,
+        MEM_ELIDE_WRITE_DEST        = 0x00020000,
+        MEM_ELIDE_WRITE_SRC         = 0x00040000,
 
         /** The request should not cause a memory access. */
         NO_ACCESS                   = 0x00080000,
@@ -202,6 +204,8 @@ class Request
         INVALIDATE                  = 0x0000000100000000,
         /** The request cleans a memory location */
         CLEAN                       = 0x0000000200000000,
+        /** The request cleans a memory location */
+        NO_TSO                      = 0x0000000400000000,
 
         /** The request targets the point of unification */
         DST_POU                     = 0x0000001000000000,
@@ -1120,6 +1124,7 @@ class Request
     bool isCacheClean() const { return _flags.isSet(CLEAN); }
     bool isCacheInvalidate() const { return _flags.isSet(INVALIDATE); }
     bool isCacheMaintenance() const { return _flags.isSet(CLEAN|INVALIDATE); }
+    bool isSkipTSO() const { return _flags.isSet(NO_TSO); }
     /** @} */
 };
 

@@ -1245,7 +1245,7 @@ LSQ::LSQRequest::sendFragmentToTranslation(int i)
 {
     numInTranslationFragments++;
     _port.getMMUPtr()->translateTiming(req(i), _inst->thread->getTC(),
-            this, isLoad() ? BaseMMU::Read : BaseMMU::Write);
+            this, isLoad() || req(i)->isSkipTSO() ? BaseMMU::Read : BaseMMU::Write);
 }
 
 void

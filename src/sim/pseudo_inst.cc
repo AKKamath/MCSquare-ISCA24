@@ -495,12 +495,11 @@ memcpy_elide(ThreadContext *tc, ExecContext *xc,
         fatal("To exeute memcpy_elide we require the memory system to be in "
               "'timing' mode.\n");
     }
-    Fault f = xc->writeMem((uint8_t*)src, len,
-        dest, Request::MEM_ELIDE, NULL, std::vector<bool>(len, true));
+    Fault f = xc->writeMem((uint8_t*)src, len, dest, 
+        Request::MEM_ELIDE | Request::NO_TSO, NULL, 
+        std::vector<bool>(len, true));
 
     if (f != NoFault) {
-        printf("In memcpy, Fault: %s\n", f->name());
-        fflush(stdout);
         Fault *fault_ptr = (Fault *)malloc(sizeof(Fault));
         *fault_ptr = f;
         return (uint64_t)fault_ptr;
@@ -517,12 +516,11 @@ memcpy_elide_free(ThreadContext *tc, ExecContext *xc, Addr dest, uint64_t len)
         fatal("To exeute memcpy_elide we require the memory system to be in "
               "'timing' mode.\n");
     }
-    Fault f = xc->writeMem(NULL, len,
-        dest, Request::MEM_ELIDE_FREE, NULL, std::vector<bool>(len, true));
+    Fault f = xc->writeMem(NULL, len, dest, 
+        Request::MEM_ELIDE_FREE | Request::NO_TSO, NULL, 
+        std::vector<bool>(len, true));
 
     if (f != NoFault) {
-        printf("In memcpy, Fault: %s\n", f->name());
-        fflush(stdout);
         Fault *fault_ptr = (Fault *)malloc(sizeof(Fault));
         *fault_ptr = f;
         return (uint64_t)fault_ptr;

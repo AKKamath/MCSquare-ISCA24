@@ -799,7 +799,7 @@ LSQUnit::writebackStores()
            storeWBIt->valid() &&
            storeWBIt->canWB() &&
            ((!needsTSO) || (!storeInFlight) || 
-           storeWBIt->request()->mainReq()->isCacheClean()) &&
+           storeWBIt->request()->mainReq()->isSkipTSO()) &&
            lsq->cachePortAvailable(false)) {
 
         if (isStoreBlocked) {
@@ -1066,7 +1066,7 @@ LSQUnit::storePostSend()
     }
 
     if (needsTSO && !(storeWBIt->request() && storeWBIt->request()->mainReq() && 
-                      storeWBIt->request()->mainReq()->isCacheClean()) ) {
+                      storeWBIt->request()->mainReq()->isSkipTSO()) ) {
         storeInFlight = true;
     }
 
@@ -1184,7 +1184,7 @@ LSQUnit::completeStore(typename StoreQueue::iterator store_idx)
     store_inst->setCompleted();
 
     if (needsTSO && !(store_idx->request() && store_idx->request()->mainReq() && 
-                      store_idx->request()->mainReq()->isCacheClean())) {
+                      store_idx->request()->mainReq()->isSkipTSO())) {
         storeInFlight = false;
     }
 
