@@ -1,6 +1,5 @@
 /*
- * Copyright 2019 University of Washington, Max Planck Institute for
- * Software Systems, and The University of Texas at Austin
+ * Copyright 2023 University of Washington
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -39,10 +38,12 @@
 
 #define OPT_THRESHOLD 1023
 
-static void *(*libc_malloc)(size_t size) = NULL;
+//static void *(*libc_malloc)(size_t size) = NULL;
 static void (*libc_free)(void *ptr) = NULL;
+//static int (*libc_munmap)(void *addr, size_t length) = NULL;
 
 bool init_done = false;
+uint64_t elisions = 0;
 
 /******************************************************************************/
 /* Helper functions */
@@ -60,9 +61,9 @@ static void init(void) {
   fprintf(stderr, "MCSquare start\n");
 
   libc_memcpy = (void* (*)(void*, const void*, long unsigned int))bind_symbol("memcpy");
-  libc_malloc = (void* (*)(size_t))bind_symbol("malloc");
+  //libc_malloc = (void* (*)(size_t))bind_symbol("malloc");
   libc_free   = (void  (*)(void *))bind_symbol("free");
-  //libc_munmap = (int   (*)(void *addr, size_t length))bind_symbol("munmap");;
+  //libc_munmap = (int   (*)(void *addr, size_t length))bind_symbol("munmap");
 
   //fprintf(stderr, "Memcpy %p, malloc %p\n", libc_memcpy, libc_malloc);
   init_done = true;
@@ -71,45 +72,62 @@ static void init(void) {
 void *memcpy(void *dest, const void *src, size_t n) {
   if(!init_done)
     init();
+
   if ((n <= OPT_THRESHOLD)) {
+    for(int i = 0; i < 10; ++i)
+      libc_memcpy(dest, src, n);
     return libc_memcpy(dest, src, n);
   }
 
-  /*static int ignore = 2;
+  static int ignore = 2;
   if(ignore) {
     --ignore;
     if(ignore == 0) {
       fprintf(stderr, "Starting memcpy\n");
     }
     return libc_memcpy(dest, src, n);
-  }*/
+  }
   memcpy_elide_clwb(dest, src, n);
   return dest;
 }
+/*
 void *malloc(size_t size) {
-  if(!init_done)
-    init();
-  if(size <= OPT_THRESHOLD)
-    return libc_malloc(size);
+  ensure_init();
+  // Avoid recursive calls here by setting flags
+  static bool in_malloc = false;
+  static bool started = false;
 
-  void *ptr = libc_malloc(size);
-  fprintf(stderr, "Malloc called size %ld, ptr %p \n", size, ptr);
-  return ptr;
-}
+  if(!started) {
+    started = true;
+    return libc_malloc(size);
+  }
+
+  if(size < OPT_THRESHOLD || in_malloc) {
+    return libc_malloc(size);
+  }
+  
+  in_malloc = true;
+
+  fprintf(stderr, "Malloc called size %ld; ", size);
+  void *alloc = libc_malloc(size);
+  fprintf(stderr, "Alloced %p\n", alloc);
+  allocs[alloc] = size;
+
+  in_malloc = false;
+  return (void*)alloc;
+}*/
 
 void free(void *ptr) {
   if(!init_done)
     init();
-
   size_t size = malloc_usable_size(ptr);
   
   if(size <= OPT_THRESHOLD)
     return libc_free(ptr);
-  fprintf(stderr, "Called free on %p (size = %ld)\n", ptr, size);
 
+  memcpy_elide_free(ptr, size);
   return libc_free(ptr);
 }
-
 
 struct setup_handler {
   ~setup_handler() {
