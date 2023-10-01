@@ -10,8 +10,6 @@
 #include <stdlib.h>
 #include <x86intrin.h>
 #include <string.h>
-#include <algorithm>    // std::shuffle
-#include <random>       // std::default_random_engine
 #define SIZE (1024*4096)
 #define PAGE_SIZE 4096
 #define HUGE_PAGE_SIZE (1024l * 1024l * 2l)
@@ -22,10 +20,12 @@
 
 #define cust_min(a, b) (((a) < (b)) ? (a) : (b))
 
+#ifdef CHRONO
 #include <chrono>
 using namespace std::chrono;
 #define TIME_NOW high_resolution_clock::now()
 #define TIME_DIFF(a, b) duration_cast<microseconds>(a - b).count()
+#endif
 
 static void *(*libc_memcpy)(void *dest, const void *src, size_t n) = memcpy;
 

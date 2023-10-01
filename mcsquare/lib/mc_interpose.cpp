@@ -39,13 +39,16 @@
 #define OPT_THRESHOLD 1024
 
 static void *(*libc_malloc)(size_t size) = NULL;
+static ssize_t (*libc_recv)(int sockfd, void *buf, size_t len, int flags) = NULL;
 static void (*libc_free)(void *ptr) = NULL;
 
 bool init_done = false;
 uint64_t elisions = 0;
+bool start = false;
 
-/******************************************************************************/
-/* Helper functions */
+/********************************/
+/*      Helper functions        */
+/********************************/
 
 static void *bind_symbol(const char *sym) {
   void *ptr;
@@ -60,6 +63,7 @@ static void init(void) {
   fprintf(stderr, "MCSquare start\n");
 
   libc_memcpy = (void* (*)(void*, const void*, long unsigned int))bind_symbol("memcpy");
+  libc_recv = (ssize_t (*)(int, void *, size_t, int))bind_symbol("recv");
   //libc_malloc = (void* (*)(size_t))bind_symbol("malloc");
   libc_free   = (void  (*)(void *))bind_symbol("free");
   //libc_munmap = (int   (*)(void *addr, size_t length))bind_symbol("munmap");
@@ -67,6 +71,10 @@ static void init(void) {
   //fprintf(stderr, "Memcpy %p, malloc %p\n", libc_memcpy, libc_malloc);
   init_done = true;
 }
+
+/********************************/
+/*     Interposed functions     */
+/********************************/
 
 void *memcpy(void *dest, const void *src, size_t n) {
   if(!init_done)
@@ -76,43 +84,32 @@ void *memcpy(void *dest, const void *src, size_t n) {
     return libc_memcpy(dest, src, n);
   }
 
-  static int ignore = 2;
-  if(ignore) {
-    --ignore;
-    if(ignore == 0) {
-      fprintf(stderr, "Starting memcpy\n");
-    }
+  if(!start) {
     return libc_memcpy(dest, src, n);
   }
+  ++elisions;
   memcpy_elide_clwb(dest, src, n);
+  //return libc_memcpy(dest, src, n);
   return dest;
 }
-/*
-void *malloc(size_t size) {
-  ensure_init();
-  // Avoid recursive calls here by setting flags
-  static bool in_malloc = false;
-  static bool started = false;
 
-  if(!started) {
-    started = true;
-    return libc_malloc(size);
+ssize_t recv(int sockfd, void* buf, size_t count, int flags) {
+  if(!init_done)
+    init();
+
+  if(sockfd == -5 && count == 0) {
+    start = true;
+    return libc_recv(sockfd, buf, count, flags);
   }
 
-  if(size < OPT_THRESHOLD || in_malloc) {
-    return libc_malloc(size);
+  if(sockfd == -6 && count == 0) {
+    start = false;
+    return libc_recv(sockfd, buf, count, flags);
   }
-  
-  in_malloc = true;
 
-  fprintf(stderr, "Malloc called size %ld; ", size);
-  void *alloc = libc_malloc(size);
-  fprintf(stderr, "Alloced %p\n", alloc);
-  allocs[alloc] = size;
+  return libc_recv(sockfd, buf, count, flags);;
+}
 
-  in_malloc = false;
-  return (void*)alloc;
-}*/
 /*
 void free(void *ptr) {
   if(!init_done)
@@ -130,6 +127,7 @@ void free(void *ptr) {
 
 struct setup_handler {
   ~setup_handler() {
+    fprintf(stderr, "Total elisions: %lu\n", elisions);
     memcpy_elide_free(this, 1);
   }
 } dummy;
