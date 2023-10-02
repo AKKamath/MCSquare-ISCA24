@@ -152,12 +152,6 @@ def template BasicMemCompleteAcc {{
             trace::InstRecord *traceData) const
     {
         // Need to figure this out.
-        /*
-        MicroHalt hltObj(machInst, mnemonic, 0x0);
-        if(xc->mwait(pkt)) {
-            hltObj.execute(xc, traceData);
-        }
-        */
         return NoFault;
     }
 }};
