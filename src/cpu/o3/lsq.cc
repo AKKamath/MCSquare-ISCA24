@@ -57,6 +57,7 @@
 #include "debug/LSQ.hh"
 #include "debug/Writeback.hh"
 #include "params/BaseO3CPU.hh"
+#include "mem/mcsquare.h"
 
 namespace gem5
 {
@@ -1244,8 +1245,9 @@ void
 LSQ::LSQRequest::sendFragmentToTranslation(int i)
 {
     numInTranslationFragments++;
-    _port.getMMUPtr()->translateTiming(req(i), _inst->thread->getTC(),
-            this, isLoad() || req(i)->isSkipTSO() ? BaseMMU::Read : BaseMMU::Write);
+    _port.getMMUPtr()->translateTiming(req(i), _inst->thread->getTC(), this, 
+        isLoad() || req(i)->isCacheClean() || isMCSquare(req(i)) ? 
+        BaseMMU::Read : BaseMMU::Write);
 }
 
 void
