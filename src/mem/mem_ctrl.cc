@@ -401,6 +401,32 @@ MemCtrl::printQs() const
 #endif // TRACING_ON
 }
 
+void
+MemCtrl::checkBounceTable() {
+    for(auto i = mcsquare->m_bt.begin(); i != mcsquare->m_bt.end();) {
+        if(mcsquare->contains(i->first, 64) == MCSquare::Types::TYPE_NONE) {
+            auto req = std::make_shared<Request>(i->first, 
+                64, Request::MEM_ELIDE_REDIRECT_SRC, 
+                Request::funcRequestorId);
+            auto bouncePkt = Packet::createWrite(req);
+            bouncePkt->allocate();
+            bouncePkt->setData(mcsquare->m_bt.getData(i->first));
+
+            auto iter = i;
+            ++i;
+            mcsquare->m_bt.remove(iter->first);
+
+            DPRINTF(MCSquare, "Bounce table writeback packet (%lx, %u)\n", 
+                    bouncePkt->getAddr(), bouncePkt->getSize());
+            accessAndRespond(bouncePkt, 
+                frontendLatency + mcsquare->getBTPenalty(), dram);
+            delete bouncePkt;
+            continue;
+        }
+        ++i;
+    }
+}
+
 bool
 MemCtrl::recvTimingReq(PacketPtr pkt)
 {
@@ -428,6 +454,7 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
         }
         else if(pkt->req->getFlags() & Request::MEM_ELIDE_FREE)
             mcsquare->deleteEntry(pkt->getAddr(), pkt->req->getSize());
+        checkBounceTable();
         // See if we're responsible for sending a response back
         bool weContain = false;
         AddrRangeList addrList = getAddrRanges();
@@ -458,24 +485,121 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
     }
 
     if(MCSquare::Types type = mcsquare->contains(pkt)) {
+        static bool paused_because_of_src_write = false;
         if(pkt->isWrite()) {
-            // TODO: Write to src
+            // See if we're responsible for sending a response back
+            bool weContain = false;
+            AddrRangeList addrList = getAddrRanges();
+            for(auto i = addrList.begin(); i != addrList.end(); ++i)
+                if(i->contains(pkt->getAddr())) {
+                    weContain = true;
+                    break;
+                }
             if(type == MCSquare::Types::TYPE_DEST) {
                 mcsquare->splitEntry(pkt);
+                checkBounceTable();
+
+                if (paused_because_of_src_write && retryWrReq && totalWriteQueueSize < writeBufferSize) {
+                    paused_because_of_src_write = false;
+                    DPRINTF(MCSquare, "Yeet: Trying to retry write requests\n");
+                    retryWrReq = false;
+                    port.sendRetryReq();
+                }
+                // Response from other memory controller
+                // Just using this to update our table, so return here.
+                if(!weContain)
+                    return true;
+                else
+                    pkt->req->setFlags(Request::MEM_ELIDE_WRITE_DEST);
                 DPRINTF(MCSquare, "Found a write to dest %lx!\n", pkt->getAddr());
                 mcsquare->stats.destWriteSize += pkt->getSize();
             } else if(type == MCSquare::Types::TYPE_SRC) {
-                // TODO
-                DPRINTF(MCSquare, "Err: Write to src %lx\n", pkt->getAddr());
-                //fflush(stdout);
-                //assert(false);
-                pkt->writeData(src_map[pkt->getAddr()]);
-                if(pkt->needsResponse()) {
-                    DPRINTF(MCSquare, "Err: Write to src %lx needs response\n", pkt->getAddr());
-                    assert(false);
+                // Not this memctrl's problem. Just return true.
+                if(!weContain)
+                    return true;
+                // Sent as a write to dest. Just acknowledge and ignore.
+                if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
+                    DPRINTF(MCSquare, "Found duplicate generated write to %lx, "
+                            "ignoring this one\n", pkt->getAddr());
+                    delete pkt;
+                    return true;
                 }
+
+                if(pkt->req->getFlags() & Request::MEM_ELIDE_WRITE_SRC) {
+                    DPRINTF(MCSquare, "Found write to src %lx, waiting for bounce to complete\n", 
+                            pkt->getAddr());
+                    retryWrReq = true;
+                    stats.numWrRetry++;
+                    paused_because_of_src_write = true;
+                    return false;
+                }
+
+                // If already generated write to src, ignore this request
+                if(mcsquare->m_bt.find(pkt->getAddr())) {
+                    mcsquare->m_bt.setData(pkt->getAddr(), pkt->getPtr<uint8_t>());
+                    DPRINTF(MCSquare, "Found write to src %lx in bounce table\n", 
+                            pkt->getAddr());
+                    accessAndRespond(pkt, 
+                        frontendLatency + mcsquare->getBTPenalty(), dram);
+                    return true;
+                }
+
+                // Exceeded BT size
+                if(mcsquare->m_bt.size() >= mcsquare->getMaxBTSize()) {
+                    fprintf(stderr, "Exceeded max BT size!\n");
+                    retryWrReq = true;
+                    stats.numWrRetry++;
+                    paused_because_of_src_write = true;
+                    return false;
+                }
+
+                // Fresh write to source, generate a read req
+                // See if we have space in read queue for read to src
+                unsigned size = pkt->getSize();
+                uint32_t burst_size = dram->bytesPerBurst();
+
+                unsigned offset = pkt->getAddr() & (burst_size - 1);
+                unsigned int pkt_count = divCeil(offset + size, burst_size);
+                if (readQueueFull(pkt_count)) {
+                    DPRINTF(MCSquare, "Found write to src %lx, read queue full\n", 
+                            pkt->getAddr());
+                    retryWrReq = true;
+                    stats.numWrRetry++;
+                    paused_because_of_src_write = true;
+                    return false;
+                }
+
+                // Create read to src request
+                pkt->req->setFlags(Request::MEM_ELIDE_WRITE_SRC);
+                auto req = std::make_shared<Request>(pkt->getAddr(), 
+                    pkt->getSize(), Request::MEM_ELIDE_WRITE_SRC, 
+                    pkt->req->funcRequestorId);
+                auto bouncePkt = Packet::createRead(req);
+                bouncePkt->allocate();
+
+                if (!addToReadQueue(bouncePkt, pkt_count, dram)) {
+                    // If we are not already scheduled to get a request out of the
+                    // queue, do so now
+                    if (!nextReqEvent.scheduled()) {
+                        DPRINTF(MemCtrl, "Request scheduled immediately\n");
+                        schedule(nextReqEvent, curTick());
+                    }
+                }
+                stats.readReqs++;
+                stats.bytesReadSys += size;
+                mcsquare->m_bt.insert(pkt->getAddr(), pkt->getPtr<uint8_t>(), true, false);
+                DPRINTF(MCSquare, "Inserted src %lx, BT size %ld\n", 
+                        pkt->getAddr(), mcsquare->m_bt.size());
+                // Now return until the final write to dest(s) is complete
                 mcsquare->stats.srcWriteSize += pkt->getSize();
-                //accessAndRespond(pkt, 100000, dram);
+                mcsquare->stats.srcWritesBlocked++;
+                /*
+                    paused_because_of_src_write = true;
+                    retryWrReq = true;
+                    stats.numWrRetry++;
+                    return false;
+                */
+                accessAndRespond(pkt, frontendLatency + mcsquare->getBTPenalty(), dram);
                 return true;
             }
         }
@@ -484,16 +608,36 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
             if(type == MCSquare::Types::TYPE_DEST) {
                 DPRINTF(MCSquare, "Found a read to dest %lx, applying elision penalty\n", pkt->getAddr());
                 mcsquare->stats.destReadSize += pkt->getSize();
-                accessAndRespond(pkt, mcsquare->getPenalty(), dram);
+                accessAndRespond(pkt, mcsquare->getCTTPenalty(), dram);
                 return true;
             } else if(type == MCSquare::Types::TYPE_SRC) {
                 mcsquare->stats.srcReadSize += pkt->getSize();
+                DPRINTF(MCSquare, "Found read to src %lx; fallthrough\n", pkt->getAddr());
             }
+        }
+    } else if(pkt->isWrite() && pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
+        // Write generated for dest. Since not in table, must be duplicate. Just drop it.
+        DPRINTF(MCSquare, "Found duplicate generated write to %lx, "
+                "ignoring this one\n", pkt->getAddr());
+        return true;
+    }
+
+    if(mcsquare->m_bt.find(pkt->getAddr())) {
+        if(pkt->isWrite()) {
+            mcsquare->m_bt.setData(pkt->getAddr(), pkt->getPtr<uint8_t>());
+            DPRINTF(MCSquare, "Found write to src %lx, in bounce table\n", pkt->getAddr());
+            accessAndRespond(pkt, frontendLatency + mcsquare->getBTPenalty(), dram);
+            return true;
+        } else if(pkt->isRead() && !(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC)) {
+            pkt->setData(mcsquare->m_bt.getData(pkt->getAddr()));
+            DPRINTF(MCSquare, "Found read to src %lx in bounce table\n", pkt->getAddr());
+            accessAndRespond(pkt, frontendLatency + mcsquare->getBTPenalty(), dram);
+            return true;
         }
     }
 
     panic_if(!(dram->getAddrRange().contains(pkt->getAddr())),
-             "Can't handle address range for packet %s\n", pkt->print());
+             "%s: Can't handle address range for packet %s (range = %s)\n", name().c_str(), pkt->print(), dram->getAddrRange().to_string().c_str());
 
     // Find out how many memory packets a pkt translates to
     // If the burst size is equal or larger than the pkt size, then a pkt
@@ -696,32 +840,92 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
     // response
     panic_if(!mem_intr->getAddrRange().contains(pkt->getAddr()),
              "Can't handle address range for packet %s\n", pkt->print());
-    mem_intr->access(pkt);
+    if(!mcsquare->m_bt.find(pkt->getAddr())
+        || (pkt->isRead() && pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC))
+        mem_intr->access(pkt);
+    else if(pkt->needsResponse())
+        pkt->makeResponse();
 
-    if(src_map.find(pkt->getAddr()) != src_map.end() && 
-        !(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC)) {
-        uint8_t *ptr = src_map[pkt->getAddr()];
-        if(pkt->isWrite())
-            pkt->writeData(ptr);
-        else if(pkt->isRead()) {
-            pkt->setData(ptr);
+
+    if(pkt->isWrite() && 
+       pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
+        pkt->deleteData();
+        return;
+    } else if(MCSquare::Types type = mcsquare->contains(pkt)) {
+        if(pkt->isRead()) {
+            if(type == MCSquare::Types::TYPE_DEST) {
+                mcsquare->bounceAddr(pkt);
+                // Add redirect flag to redirect
+                DPRINTF(MCSquare, "Setting redirect packet! %lx %lx %lx\n", 
+                    pkt->req->_paddr_dest, pkt->req->_paddr_src, pkt->getAddr());
+                pkt->req->setFlags(Request::MEM_ELIDE_REDIRECT_SRC);
+            } else if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
+                bool complete = mcsquare->bounceAddr(pkt);
+                // We have read the appropriate data. Clear flag.
+                DPRINTF(MCSquare, "Checking redirect packet (c? %d) %lx %lx, addr %lx\n", 
+                    complete, pkt->req->_paddr_dest, pkt->req->_paddr_src, pkt->getAddr());
+                if(complete) {
+                    if(pkt->req->getFlags() & Request::MEM_ELIDE_WRITE_SRC) {
+                        pkt->cmd = pkt->makeWriteCmd(pkt->req);
+                        pkt->makeResponse();
+                    } else {
+                        // We have read the appropriate data. Clear flag.
+                        DPRINTF(MCSquare, "Clearing redirect packet! %lx %lx, addr %lx\n", 
+                            pkt->req->_paddr_dest, pkt->req->_paddr_src, pkt->getAddr());
+                        pkt->req->clearFlags(Request::MEM_ELIDE_REDIRECT_SRC);
+                        // Make duplicate write to dest
+                        /*auto req = std::make_shared<Request>(pkt->getAddr(), 
+                            pkt->getSize(), Request::MEM_ELIDE_WRITE_SRC | Request::MEM_ELIDE_REDIRECT_SRC, 
+                            pkt->req->funcRequestorId);
+                        auto bouncePkt = Packet::createWrite(req);
+                        bouncePkt->allocate();
+                        bouncePkt->setData(pkt->getPtr<uint8_t>());
+                        bouncePkt->makeResponse();
+                        DPRINTF(MCSquare, "Generated dest write %lx\n", 
+                                bouncePkt->getAddr());
+                        Tick response_time = curTick() + static_latency + 
+                            pkt->headerDelay + pkt->payloadDelay;
+                        port.schedTimingResp(bouncePkt, response_time);*/
+                    }
+                }
+            } else if(type == MCSquare::Types::TYPE_SRC &&
+                    pkt->req->getFlags() & Request::MEM_ELIDE_WRITE_SRC &&
+                    !(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC)) {
+                DPRINTF(MCSquare, "Finished reading bounced src %lx\n", pkt->getAddr());
+                //mcsquare->m_bt.remove(pkt->getAddr());
+                // Generate destinations that this source should be written into
+                std::vector<PacketPtr> pktList = mcsquare->genDestReads(pkt);
+                for(auto i = pktList.begin(); i != pktList.end(); ++i) {
+                    (*i)->makeResponse();
+                    Tick response_time = curTick() + static_latency + 
+                                            pkt->headerDelay + pkt->payloadDelay;
+
+                    // queue the packet in the response queue to be sent out after
+                    // the static latency has passed
+                    port.schedTimingResp((*i), response_time);
+                    if((*i)->isRead())
+                        DPRINTF(MCSquare, "Generated src read %lx for dest %lx\n", 
+                                (*i)->getAddr(), (*i)->req->_paddr_dest);
+                    else
+                        DPRINTF(MCSquare, "Generated dest write %lx\n", 
+                                (*i)->getAddr());
+                }
+                pkt->deleteData();
+                // The src read does not need response as it was generated by
+                // the memory controller itself.
+                delete pkt;
+                return;
+            }
         }
     }
-
-    if(pkt->isRead() && mcsquare->contains(pkt) == MCSquare::Types::TYPE_DEST) {
-        mcsquare->bounceAddr(pkt);
-        // Add redirect flag to redirect
-        DPRINTF(MCSquare, "Setting redirect packet! %lx %lx %lx\n", 
-               pkt->req->_paddr_dest, pkt->req->_paddr_src, pkt->getAddr());
-        pkt->req->setFlags(Request::MEM_ELIDE_REDIRECT_SRC);
-    } else if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
-        bool complete = mcsquare->bounceAddr(pkt);
-        if(complete) {
-            // We have read the appropriate data. Clear flag.
-            DPRINTF(MCSquare, "Clearing redirect packet! %lx %lx, addr %lx\n", 
-                pkt->req->_paddr_dest, pkt->req->_paddr_src, pkt->getAddr());
-            pkt->req->clearFlags(Request::MEM_ELIDE_REDIRECT_SRC);
-        }
+    // Corner case of read to src, but it got removed from table in between
+    else if(pkt->isRead() && pkt->req->getFlags() & Request::MEM_ELIDE_WRITE_SRC &&
+       !(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC)) {
+        pkt->deleteData();
+        // The src read does not need response as it was generated by
+        // the memory controller itself.
+        delete pkt;
+        return;
     }
 
     // turn packet around to go back to requestor if response expected
@@ -1226,6 +1430,7 @@ MemCtrl::processNextReqEvent(MemInterface* mem_intr,
         schedule(next_req_event, std::max(mem_intr->nextReqTime, curTick()));
 
     if (retry_wr_req && totalWriteQueueSize < writeBufferSize) {
+        DPRINTF(MCSquare, "Trying to retry write requests\n");
         retry_wr_req = false;
         port.sendRetryReq();
     }

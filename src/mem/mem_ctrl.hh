@@ -782,15 +782,14 @@ class MemCtrl : public qos::MemCtrl
 
     MCSquare *mcsquare;
 
-    // TODO: Delete this and actually implement source remapping.
-    std::map<gem5::Addr, uint8_t[64]> src_map;
-
   protected:
 
     virtual Tick recvAtomic(PacketPtr pkt);
     virtual Tick recvAtomicBackdoor(PacketPtr pkt, MemBackdoorPtr &backdoor);
     virtual void recvFunctional(PacketPtr pkt);
     virtual bool recvTimingReq(PacketPtr pkt);
+
+    void checkBounceTable();
 
     bool recvFunctionalLogic(PacketPtr pkt, MemInterface* mem_intr);
     Tick recvAtomicLogic(PacketPtr pkt, MemInterface* mem_intr);

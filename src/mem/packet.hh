@@ -299,6 +299,7 @@ class Packet : public Printable
     uint64_t mc_size = -1;
     uint64_t mc_src_offset = -1;
     uint64_t mc_dest_offset = -1;
+    uint64_t mc_right_offset = -1;
 
   private:
     enum : FlagsType

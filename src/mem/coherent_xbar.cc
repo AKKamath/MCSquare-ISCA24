@@ -468,15 +468,25 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     // determine the source port based on the id
     RequestPort *src_port = memSidePorts[mem_side_port_id];
 
-    // determine the destination
-    const auto route_lookup = routeTo.find(pkt->req);
-    assert(route_lookup != routeTo.end());
-    const PortID cpu_side_port_id = route_lookup->second;
-    assert(cpu_side_port_id != InvalidPortID);
-    assert(cpu_side_port_id < respLayers.size());
+    if(pkt->req->getFlags() & Request::MEM_ELIDE_WRITE_DEST && pkt->isWrite()) {
+        // Write response which modified elision table. Forward to all memctrls.
+        pkt->cmd = pkt->makeWriteCmd(pkt->req);
+        for(auto i = portMap.begin(); i != portMap.end(); ++i) {
+            if(pkt->getAddrRange().isSubset(AddrRange(i->first.start(), i->first.end())))
+                if(i->second != mem_side_port_id)
+                    memSidePorts[i->second]->sendTimingReq(pkt);
+        }
+        // Forwarding done. Proceed as normal
+        pkt->makeResponse();
+    }
 
-    if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC && pkt->isRead()) {
-        pkt->cmd = pkt->makeReadCmd(pkt->req);
+    if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
+        //DPRINTF(MCSquare, "Found bounce packet for dest %lx, read? %d, write? %d, addr %lx\n", 
+        //        pkt->req->_paddr_dest, pkt->isRead(), pkt->isWrite(), pkt->getAddr());
+        if(pkt->isRead())
+            pkt->cmd = pkt->makeReadCmd(pkt->req);
+        else if(pkt->isWrite())
+            pkt->cmd = pkt->makeWriteCmd(pkt->req);
         //routeTo.erase(route_lookup);
 
         // store the old header delay so we can restore it if needed
@@ -489,15 +499,30 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
         calcPacketTiming(pkt, xbar_delay);
 
         // determine the destination based on the destination address range
-        PortID mem_side_port_id = findPort(pkt->getAddrRange());
-        // since it is a normal request, attempt to send the packet
-        bool success = memSidePorts[mem_side_port_id]->sendTimingReq(pkt);
+        PortID mem_side_port_id_new = findPort(pkt->getAddrRange());
+        if(pkt->isWrite()) {
+            // First broadcast to all ports to update the CTT
+            for(auto i = portMap.begin(); i != portMap.end(); ++i) {
+                if(pkt->getAddrRange().isSubset(AddrRange(i->first.start(), i->first.end())))
+                    if(i->second != mem_side_port_id_new)
+                        memSidePorts[i->second]->sendTimingReq(pkt);
+            }
+        }
+        // Now since it is a normal request, attempt to send the packet
+        bool success = memSidePorts[mem_side_port_id_new]->sendTimingReq(pkt);
         if(!success) {
-            assert(!respLayers[cpu_side_port_id]->tryTiming(src_port));
+            //assert(!respLayers[cpu_side_port_id]->tryTiming(src_port));
+            assert(false);
             pkt->headerDelay = old_header_delay;
         }
         return success;
     }
+
+    // determine the destination
+    assert(route_lookup != routeTo.end());
+    const PortID cpu_side_port_id = route_lookup->second;
+    assert(cpu_side_port_id != InvalidPortID);
+    assert(cpu_side_port_id < respLayers.size());
 
     // test if the crossbar should be considered occupied for the
     // current port
