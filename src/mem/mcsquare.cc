@@ -12,7 +12,12 @@ bool isMCSquare(const RequestPtr req)
 
 bool isMCSquare(const gem5::Packet* pkt)
 {
-  return isMCSquare(pkt->req);
+    return isMCSquare(pkt->req);
+}
+
+bool isMCReq(const gem5::Packet* pkt)
+{
+    return pkt->req->getFlags() & (Request::MEM_ELIDE_WRITE_SRC | Request::MEM_ELIDE_REDIRECT_SRC);
 }
 
 namespace memory
@@ -25,37 +30,23 @@ MCSquare::insertEntry(Addr dest, Addr src, uint64_t size)
         return;
 
     /*
-     * TODO:
-     * 1) Merge entries if they continue -> DONE
-     * 2) If Src matches dest of existing entry, have entry use src of other entry
-     * 3) If dest exists, but new src, either split entry or rewrite entry
-     * 4) If src is new dest (???)
-    */
-    for(auto i = m_ctt.begin(); i != m_ctt.end(); ++i) {
-        // See if we can merge entries first
-        if(i->src + i->size == src && i->dest + i->size == dest) {
-            DPRINTF(MCSquare, "Merged: dest - %lx, src - %lx, size - %lu\n", 
-                    dest, src, size);
-            i->size += size;
-            return;
-        }
-        if(src + size == i->src && dest + size == i->dest) {
-            DPRINTF(MCSquare, "Merged: dest - %lx, src - %lx, size - %lu\n", 
-                   dest, src, size);
-            i->dest = dest;
-            i->src  = src;
-            i->size += size;
-            return;
-        }
+     * Steps for insertion:
+     * 1) If dest exists in an entry, either split or remove existing entry
+     * 2) If src matches dest of existing entry, use src of existing entry
+     * 3) Merge entries if they are contiguous
+     * 4) Finally, insert new entry
+     */
 
-        // See if the current dest already exists
+    // 1) See if the current dest already exists
+    for(auto i = m_ctt.begin(); i != m_ctt.end(); ++i) {
         if(RangeSize(dest, size).intersects(RangeSize(i->dest, i->size))) {
             if(dest <= i->dest) {
                 // See if this entry is subsumed by this operation
                 if(dest + size >= i->dest + i->size) {
-                    auto entry = i;
+                    DPRINTF(MCSquare, "New entry (%lx, %lx, %lu) intersects. Removing this entry (%lx, %lx, %lu)\n", 
+                        dest, src, size, i->dest, i->src, i->size);
+                    i = m_ctt.erase(i);
                     i--;
-                    m_ctt.erase(entry);
                     continue;
                 } else {
                     // Just an intersection. Cut this entry down to point of intersection
@@ -63,6 +54,8 @@ MCSquare::insertEntry(Addr dest, Addr src, uint64_t size)
                     i->dest += offset;
                     i->src  += offset;
                     i->size -= offset;
+                    DPRINTF(MCSquare, "New entry (%lx, %lx, %lu) intersects. Cutting down this entry (%lx, %lx, %lu)\n", 
+                        dest, src, size, i->dest, i->src, i->size);
                     continue;
                 }
             } else {
@@ -86,15 +79,17 @@ MCSquare::insertEntry(Addr dest, Addr src, uint64_t size)
                     uint64_t offset = fringe_dest - i->dest;
                     uint64_t fringe_src  = i->src + offset;
                     uint64_t fringe_size = curr_size - offset;
-                    insertEntry(fringe_dest, fringe_src, fringe_size);
+                    m_ctt.push_back(CTTableEntry(fringe_dest, fringe_src, fringe_size));
 
                     // 3. New entry for current op (done outside loop)
                     continue;
                 }
             }
         }
+    }
 
-        // See if the current src is a previous dest
+    // 2) If the current src is a previous dest, use previous src
+    for(auto i = m_ctt.begin(); i != m_ctt.end(); ++i) {
         if(RangeSize(src, size).intersects(RangeSize(i->dest, i->size))) {
             if(src >= i->dest) {
                 uint64_t offset = src - i->dest;
@@ -124,6 +119,25 @@ MCSquare::insertEntry(Addr dest, Addr src, uint64_t size)
         }
     }
 
+    // 3) See if we can merge entries
+    for(auto i = m_ctt.begin(); i != m_ctt.end(); ++i) {
+        if(i->src + i->size == src && i->dest + i->size == dest) {
+            DPRINTF(MCSquare, "Merged: dest - %lx, src - %lx, size - %lu\n", 
+                    dest, src, size);
+            i->size += size;
+            return;
+        }
+        if(src + size == i->src && dest + size == i->dest) {
+            DPRINTF(MCSquare, "Merged: dest - %lx, src - %lx, size - %lu\n", 
+                   dest, src, size);
+            i->dest = dest;
+            i->src  = src;
+            i->size += size;
+            return;
+        }
+    }
+
+    // 4) Final insert
     m_ctt.push_back(CTTableEntry(dest, src, size));
     stats.maxEntries = std::max((size_t)stats.maxEntries.value(), m_ctt.size());
     DPRINTF(MCSquare, "Added: dest - %lx, src - %lx, size - %lu\n", 
@@ -147,9 +161,8 @@ MCSquare::deleteEntry(Addr dest, uint64_t size)
                 if(dest + size >= i->dest + i->size) {
                     DPRINTF(MCSquare, "Deleted: dest - %lx, size - %lu\n", 
                         i->dest, i->size);
-                    auto entry = i;
+                    i = m_ctt.erase(i);
                     i--;
-                    m_ctt.erase(entry);
                     continue;
                 } else {
                     // Just an intersection. Cut this entry down to point of intersection
@@ -185,7 +198,9 @@ MCSquare::deleteEntry(Addr dest, uint64_t size)
                     uint64_t offset = fringe_dest - i->dest;
                     uint64_t fringe_src  = i->src + offset;
                     uint64_t fringe_size = curr_size - offset;
-                    insertEntry(fringe_dest, fringe_src, fringe_size);
+                    DPRINTF(MCSquare, "Insert3: dest - %lx, src - %lx, size - %lu\n", 
+                        fringe_dest, fringe_src, fringe_size);
+                    m_ctt.push_back(CTTableEntry(fringe_dest, fringe_src, fringe_size));
                     continue;
                 }
             }
@@ -198,17 +213,8 @@ MCSquare::splitEntry(PacketPtr pkt)
 {
     assert(pkt->getSize() == 64);
     assert((pkt->getAddr() & 63) == 0);
-    gem5::Addr splitAddr = pkt->getAddr();
-    // Delete entry will automatically split
+    // Delete entry will automatically sqplit
     deleteEntry(pkt->getAddr(), pkt->getSize());
-    // Now see what to do for src
-    for(auto i = m_ctt.begin(); i != m_ctt.end(); ++i) {
-        if(RangeSize(i->src, i->size).contains(splitAddr)) {
-            // TODO
-            fflush(stdout);
-            assert(false);
-        }
-    }
 }
 
 MCSquare::Types
@@ -216,14 +222,13 @@ MCSquare::contains(Addr addr, size_t size)
 {
     for(auto i = m_ctt.begin(); i != m_ctt.end(); ++i) {
         if(RangeSize(addr, size).intersects(RangeSize(i->src, i->size))) {
+            DPRINTF(MCSquare, "BPQ entry %lx intersects (d%lx, s%lx, %lu)\n", 
+                    addr, i->dest, i->src, i->size);
             return Types::TYPE_SRC;
         }
     }
     for(auto i = m_ctt.begin(); i != m_ctt.end(); ++i) {
         if(RangeSize(addr, size).intersects(RangeSize(i->dest, i->size))) {
-            //DPRINTF(MCSquare, "Packet (%lx, %u) intersects entry: "
-            //    "dest %lx, src %lx, size %lu\n", addr, size,
-            //    i->dest, i->src, i->size);
             return Types::TYPE_DEST;
         }
     }
@@ -257,6 +262,31 @@ MCSquare::contains(PacketPtr pkt)
 }
 
 bool
+MCSquare::isSrc(PacketPtr pkt)
+{
+    for(auto i = m_ctt.begin(); i != m_ctt.end(); ++i) {
+        if(pkt->getAddrRange().intersects(RangeSize(i->src, i->size))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool
+MCSquare::isDest(PacketPtr pkt)
+{
+    for(auto i = m_ctt.begin(); i != m_ctt.end(); ++i) {
+        if(pkt->getAddrRange().intersects(RangeSize(i->dest, i->size))) {
+            DPRINTF(MCSquare, "Packet (%lx, %u) intersects entry: "
+                "dest %lx, src %lx, size %lu\n", pkt->getAddr(), pkt->getSize(),
+                i->dest, i->src, i->size);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool
 MCSquare::bounceAddr(PacketPtr pkt)
 {
     // First move dest_offset to appropriate position
@@ -277,8 +307,8 @@ MCSquare::bounceAddr(PacketPtr pkt)
 
     // Shouldn't reach here
     if(pkt->mc_dest_offset > 64) {
-        fprintf(stderr, "Cannot find bounce entry for packet: dest=%lx, "
-            "dest offset = %lu\n", pkt->req->_paddr_dest, pkt->mc_dest_offset);
+        fprintf(stderr, "%lu: Cannot find bounce entry for packet: dest=%lx, "
+            "dest offset = %lu\n", ::gem5::curTick(), pkt->req->_paddr_dest, pkt->mc_dest_offset);
         fflush(stdout);
         assert(false);
     }
@@ -297,12 +327,20 @@ MCSquare::bounceAddr(PacketPtr pkt)
             return false;
         }
     }
-    fprintf(stderr, "Cannot find bounce entry for packet: dest=%lx, "
-            "dest offset = %lu\n", pkt->req->_paddr_dest, pkt->mc_dest_offset);
-    // Shouldn't reach here
-    fflush(stdout);
-    assert(false);
-    return true;
+    // Bounced dest read for already written dest
+    if(pkt->req->getFlags() & Request::MEM_ELIDE_WRITE_SRC) {
+        pkt->setAddr(pkt->req->_paddr_dest);
+        return true;
+    }
+    
+    fprintf(stderr, "%lu: Cannot find bounce entry for packet: dest=%lx, "
+        "dest offset = %lu\n", ::gem5::curTick(), pkt->req->_paddr_dest, pkt->mc_dest_offset);
+    // Dest was written while a bounce was ongoing.
+    pkt->setAddr(pkt->req->_paddr_dest);
+    pkt->mc_dest_offset = 0;
+    pkt->mc_size = 0;
+    pkt->req->_paddr_dest = 100;
+    return false;
 }
 
 std::vector<PacketPtr> 
@@ -313,11 +351,13 @@ MCSquare::genDestReads(PacketPtr srcPkt)
         if(RangeSize(i->src, i->size).intersects(
                 RangeSize(srcPkt->getAddr(), srcPkt->getSize()))) {
             int64_t offset = srcPkt->getAddr() - i->src;
-            DPRINTF(MCSquare, "Gen read offset = %ld, srcpkt addr: %lx;  "
-                    "Entry intersect: dest %lx, src %lx, size %lu\n",
-                    offset, srcPkt->getAddr(), i->dest, i->src, i->size);
-            // Handle rare, irregular case where dest is not cache-aligned
+            // For rare, irregular case where dest is not cache-aligned
             int64_t doffset = i->dest % 64;
+
+            DPRINTF(MCSquare, "Gen read offset = %ld, doffset=%ld, srcpkt addr: %lx;  "
+                    "Entry intersect: dest %lx, src %lx, size %lu; peek: %lu\n",
+                    offset, doffset, srcPkt->getAddr(), i->dest, i->src, i->size, *srcPkt->getPtr<uint64_t>());
+            
             if(offset >= 0) {
                 // Should intersect 2 dest cachelines in this case
                 if((offset + doffset) % 64 > 0 && i->size - offset >= 64) {
@@ -335,9 +375,9 @@ MCSquare::genDestReads(PacketPtr srcPkt)
                         pkt->req->_paddr_dest = destAddr;
                         pkt->allocate();
                         bounceAddr(pkt);
-                        pkt->setData(srcPkt->getPtr<uint8_t>(), offset % 64, 
-                                    0, 64 - (offset % 64));
-                        pkt->mc_right_offset = 64 - (offset % 64);
+                        pkt->setData(srcPkt->getPtr<uint8_t>(), (offset + doffset) % 64, 
+                                    0, 64 - ((offset + doffset) % 64));
+                        pkt->mc_right_offset = 64 - ((doffset + offset) % 64);
                         destReads.push_back(pkt);
                     }
                     // Create packet for DEST2:
@@ -371,6 +411,7 @@ MCSquare::genDestReads(PacketPtr srcPkt)
                     pkt->setData(srcPkt->getPtr<uint8_t>(), pkt->mc_dest_offset, 
                             pkt->mc_src_offset, pkt->mc_size);
                     bounceAddr(pkt);
+                    assert(pkt->mc_dest_offset == 64);
                     pkt->cmd = pkt->makeWriteCmd(pkt->req);
                     destReads.push_back(pkt);
                 } else if((doffset + offset) % 64 == 0 && i->size - offset < 64) {
@@ -403,9 +444,9 @@ MCSquare::genDestReads(PacketPtr srcPkt)
                     pkt->req->_paddr_dest = destAddr;
                     pkt->allocate();
                     bounceAddr(pkt);
-                    pkt->setData(srcPkt->getPtr<uint8_t>(), offset % 64, 
-                                0, 64 - (offset % 64));
-                    pkt->mc_right_offset = 64 - (offset % 64);
+                    pkt->setData(srcPkt->getPtr<uint8_t>(), (doffset + offset) % 64, 
+                                0, 64 - ((doffset + offset) % 64));
+                    pkt->mc_right_offset = 64 - ((doffset + offset) % 64);
                     destReads.push_back(pkt);
                 } else {
                     fprintf(stderr, "Trying to gen read: "
@@ -420,18 +461,84 @@ MCSquare::genDestReads(PacketPtr srcPkt)
                 // DEST: {[DEST ]         }
                 // SRC:[ {SRC ]           }
                 //     <-> (negative offset)
-                Addr destAddr =  (i->dest + offset + 64) & ~(63lu);
-                auto req = std::make_shared<Request>(destAddr, srcPkt->getSize(), 
-                    Request::MEM_ELIDE_WRITE_SRC | Request::MEM_ELIDE_REDIRECT_SRC, 
-                    srcPkt->req->funcRequestorId);
-                auto pkt = Packet::createRead(req);
-                pkt->req->_paddr_dest = destAddr;
-                pkt->allocate();
-                bounceAddr(pkt);
-                pkt->setData(srcPkt->getPtr<uint8_t>(), pkt->mc_dest_offset, 
-                        pkt->mc_src_offset, pkt->mc_size);
-                bounceAddr(pkt);
-                destReads.push_back(pkt);
+
+                // Intersects 2 cachelines, because this dest has too little left
+                //Gen read offset = -16, srcpkt addr: a71cd000;  Entry intersect: dest 223736a, src a71cd010, size 22
+                //Cannot find bounce entry for packet: dest=2237380
+                if((offset + 64) + doffset > 64 && (i->size + doffset) > 64) {
+                    // 1st packet
+                    {
+                        Addr destAddr =  (i->dest) & ~(63lu);
+                        auto req = std::make_shared<Request>(destAddr, srcPkt->getSize(), 
+                            Request::MEM_ELIDE_WRITE_SRC | Request::MEM_ELIDE_REDIRECT_SRC, 
+                            srcPkt->req->funcRequestorId);
+                        auto pkt = Packet::createRead(req);
+                        pkt->req->_paddr_dest = destAddr;
+                        pkt->allocate();
+                        bounceAddr(pkt);
+                        uint64_t amount = 64 - doffset;
+                        pkt->setData(srcPkt->getPtr<uint8_t>(), doffset, 
+                                    -1 * offset, amount);
+                        pkt->mc_right_offset = 64 - (amount % 64);
+                        destReads.push_back(pkt);
+                    }
+                    // 2nd packet
+                    {
+                        Addr destAddr =  (i->dest + 64) & ~(63lu);
+                        auto req = std::make_shared<Request>(destAddr, srcPkt->getSize(), 
+                            Request::MEM_ELIDE_WRITE_SRC | Request::MEM_ELIDE_REDIRECT_SRC, 
+                            srcPkt->req->funcRequestorId);
+                        auto pkt = Packet::createRead(req);
+                        pkt->req->_paddr_dest = destAddr;
+                        pkt->allocate();
+                        bounceAddr(pkt);
+                        pkt->setData(srcPkt->getPtr<uint8_t>(), pkt->mc_dest_offset, 
+                                pkt->mc_src_offset, pkt->mc_size);
+                        bounceAddr(pkt);
+                        destReads.push_back(pkt);
+                    }
+                } else if((offset + 64) + doffset >= 64) {
+                    Addr destAddr =  (i->dest) & ~(63lu);
+                    auto req = std::make_shared<Request>(destAddr, srcPkt->getSize(), 
+                        Request::MEM_ELIDE_WRITE_SRC | Request::MEM_ELIDE_REDIRECT_SRC, 
+                        srcPkt->req->funcRequestorId);
+                    auto pkt = Packet::createRead(req);
+                    pkt->req->_paddr_dest = destAddr;
+                    pkt->allocate();
+                    bounceAddr(pkt);
+                    uint64_t amount = std::min((uint64_t)(64 + offset), i->size);
+                    pkt->setData(srcPkt->getPtr<uint8_t>(), doffset, 
+                                -1 * offset, amount);
+                    pkt->mc_right_offset = amount;
+                    destReads.push_back(pkt);
+                } else if(doffset == 0) {
+                        Addr destAddr =  (i->dest) & ~(63lu);
+                        auto req = std::make_shared<Request>(destAddr, srcPkt->getSize(), 
+                            Request::MEM_ELIDE_WRITE_SRC | Request::MEM_ELIDE_REDIRECT_SRC, 
+                            srcPkt->req->funcRequestorId);
+                        auto pkt = Packet::createRead(req);
+                        pkt->req->_paddr_dest = destAddr;
+                        pkt->allocate();
+                        bounceAddr(pkt);
+                        pkt->setData(srcPkt->getPtr<uint8_t>(), pkt->mc_dest_offset, 
+                                pkt->mc_src_offset, pkt->mc_size);
+                        bounceAddr(pkt);
+                        destReads.push_back(pkt);
+                } else {
+                    Addr destAddr =  (i->dest) & ~(63lu);
+                    auto req = std::make_shared<Request>(destAddr, srcPkt->getSize(), 
+                        Request::MEM_ELIDE_WRITE_SRC | Request::MEM_ELIDE_REDIRECT_SRC, 
+                        srcPkt->req->funcRequestorId);
+                    auto pkt = Packet::createRead(req);
+                    pkt->req->_paddr_dest = destAddr;
+                    pkt->allocate();
+                    bounceAddr(pkt);
+                    destReads.push_back(pkt);
+                    fprintf(stderr, "Trying to gen read: "
+                            "offset = %ld, doffset = %ld, srcpkt addr: %lx\n"
+                            "Entry intersect: dest %lx, src %lx, size %lu\n",
+                            offset, doffset, srcPkt->getAddr(), i->dest, i->src, i->size);
+                }
             }
         }
     }

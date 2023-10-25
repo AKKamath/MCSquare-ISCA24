@@ -300,16 +300,39 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
                 pkt->clearWriteThrough();
             }
 
+            bool allowed = true;
             // Forward MCSquare packets to all memctrls
-            if(isMCSquare(pkt)) {
+            if(isMCSquare(pkt) && name() == "system.membus") {
+                // First check if memctrl can accept lazy copy request
+                // The value 101 is so that memctrl knows this is just a check
+                pkt->mc_dest_offset = 101;
                 for(auto i = portMap.begin(); i != portMap.end(); ++i) {
                     if(pkt->getAddrRange().isSubset(AddrRange(i->first.start(), i->first.end())))
-                        if(i->second != mem_side_port_id)
-                            memSidePorts[i->second]->sendTimingReq(pkt);
+                        if(i->second != mem_side_port_id) {
+                            allowed = memSidePorts[i->second]->sendTimingReq(pkt);
+                            if(!allowed)
+                                break;
+                        }
                 }
+                // Let owner memctrl also check. Inform it of prior check value
+                pkt->mc_dest_offset = 100 + (allowed ? 1 : 0);
+                allowed = memSidePorts[mem_side_port_id]->sendTimingReq(pkt);
+                // If no issues, formally issue request
+                pkt->mc_dest_offset = 0;
+                if(allowed) {
+                    for(auto i = portMap.begin(); i != portMap.end(); ++i) {
+                        if(pkt->getAddrRange().isSubset(AddrRange(i->first.start(), i->first.end())))
+                            if(i->second != mem_side_port_id) {
+                                memSidePorts[i->second]->sendTimingReq(pkt);
+                            }
+                    }
+
+                } else
+                    success = false;
             }
             // since it is a normal request, attempt to send the packet
-            success = memSidePorts[mem_side_port_id]->sendTimingReq(pkt);
+            if(allowed)
+                success = memSidePorts[mem_side_port_id]->sendTimingReq(pkt);
         } else {
             // no need to forward, turn this packet around and respond
             // directly
@@ -358,7 +381,7 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
             }
 
             // remember where to route the normal response to
-            if (expect_response || expect_snoop_resp) {
+            if ((expect_response || expect_snoop_resp) && !isMCSquare(pkt)) {
                 assert(routeTo.find(pkt->req) == routeTo.end());
                 routeTo[pkt->req] = cpu_side_port_id;
 
@@ -468,6 +491,12 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     // determine the source port based on the id
     RequestPort *src_port = memSidePorts[mem_side_port_id];
 
+    // CPU already got ACK for packet from cache. Delete here.
+    if(isMCSquare(pkt)) {
+        delete pkt;
+        return true;
+    }
+
     if(pkt->req->getFlags() & Request::MEM_ELIDE_WRITE_DEST && pkt->isWrite()) {
         // Write response which modified elision table. Forward to all memctrls.
         pkt->cmd = pkt->makeWriteCmd(pkt->req);
@@ -481,13 +510,16 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     }
 
     if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
-        //DPRINTF(MCSquare, "Found bounce packet for dest %lx, read? %d, write? %d, addr %lx\n", 
-        //        pkt->req->_paddr_dest, pkt->isRead(), pkt->isWrite(), pkt->getAddr());
         if(pkt->isRead())
             pkt->cmd = pkt->makeReadCmd(pkt->req);
         else if(pkt->isWrite())
             pkt->cmd = pkt->makeWriteCmd(pkt->req);
         //routeTo.erase(route_lookup);
+
+        if(pkt->req->_paddr_dest == 100) {
+            pkt->req->_paddr_dest = 0;
+            pkt->req->clearFlags(Request::MEM_ELIDE_REDIRECT_SRC);
+        }
 
         // store the old header delay so we can restore it if needed
         Tick old_header_delay = pkt->headerDelay;
@@ -511,6 +543,8 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
         // Now since it is a normal request, attempt to send the packet
         bool success = memSidePorts[mem_side_port_id_new]->sendTimingReq(pkt);
         if(!success) {
+            DPRINTF(MCSquare, "Found bounce packet for dest %lx, read? %d, write? %d, addr %lx\n", 
+                    pkt->req->_paddr_dest, pkt->isRead(), pkt->isWrite(), pkt->getAddr());
             //assert(!respLayers[cpu_side_port_id]->tryTiming(src_port));
             // TODO_AK: Deal with this case.
             assert(false);

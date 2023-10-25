@@ -337,6 +337,29 @@ Cache::handleTimingReqMiss(PacketPtr pkt, CacheBlk *blk, Tick forward_time,
 
         stats.cmdStats(pkt).mshrUncacheable[pkt->req->requestorId()]++;
 
+        // HACK: Send dummy response to CPUs
+        // Ideally, the CPU should issue these as non-blocking instead
+        if(isMCSquare(pkt) && pkt->requestorId() != Request::funcRequestorId) {
+            DPRINTF(MCSquare, "Making copy of MC packet in cache %lx %lx %lu\n", 
+                pkt->req->_paddr_dest, pkt->req->_paddr_src, pkt->req->getSize());
+            PacketPtr pf = nullptr;
+            // copy the request and create a new packet
+            RequestPtr req = std::make_shared<Request>(pkt->req->getPaddr(),
+                pkt->req->getSize(), pkt->req->getFlags(), pkt->req->funcRequestorId);
+            req->_paddr_dest = pkt->req->_paddr_dest;
+            req->_paddr_src  = pkt->req->_paddr_src;
+            req->_vaddr_dest = pkt->req->_vaddr_dest;
+            req->_vaddr_src  = pkt->req->_vaddr_src;
+            pf = new Packet(req, pkt->cmd);
+            pf->allocate();
+            assert(pf->matchAddr(pkt));
+            assert(pf->getSize() == pkt->getSize());
+
+            pkt->makeTimingResponse();
+            cpuSidePort.schedTimingResp(pkt, request_time);
+            pkt = pf;
+        }
+
         if (pkt->isWrite()) {
             allocateWriteBuffer(pkt, forward_time);
         } else {

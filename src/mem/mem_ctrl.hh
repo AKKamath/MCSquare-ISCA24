@@ -291,6 +291,13 @@ class MemCtrl : public qos::MemCtrl
      */
     bool retryRdReq;
     bool retryWrReq;
+    bool srcWritePause;
+
+    /**
+     * Check whether the incoming MCSquare request 
+     * violates ongoing operations in the memctrl.
+     */
+    bool canHandleMCPkt(PacketPtr pkt, bool &canHandle);
 
     /**
      * Bunch of things requires to setup "events" in gem5

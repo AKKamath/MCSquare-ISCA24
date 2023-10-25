@@ -1255,12 +1255,12 @@ BaseCache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
             if(blk)
                 invalidateBlock(blk);
         }
-        // Invalidate source only for MEM_ELIDE - maybe not required?
+        // Writeback source only for MEM_ELIDE -> currently done manually with clwb
         /*if(pkt->req->getFlags() & Request::MEM_ELIDE) {
             for(int i = 0; i < pkt->req->getSize(); i += blkSize) {
-                CacheBlk *blk = tags->findBlock(pkt->req->_paddr_src + i, pkt->isSecure());
-                if(blk)
-                    invalidateBlock(blk);
+                CacheBlk *blk = tags->findBlock((pkt->req->_paddr_src & (~63)) + i, pkt->isSecure());
+                if(blk && blk->isValid() && blk->isSet(CacheBlk::DirtyBit))
+                    writebacks.push_back(writebackBlk(blk));
             }
         }*/
         return false;

@@ -24,6 +24,7 @@ namespace gem5
 // Helpers to simplify code
 bool isMCSquare(const RequestPtr req);
 bool isMCSquare(const gem5::Packet* pkt);
+bool isMCReq(const gem5::Packet* pkt);
 
 namespace memory
 {
@@ -49,30 +50,28 @@ class MCSquare : public SimObject {
     };
     std::list<CTTableEntry> m_ctt;
 
-    const int bt_max_sz;
-    const Tick bt_acc_lat;
-    class BounceTable {
-      struct BounceTableEntry {
+    const int bpq_max_sz;
+    const Tick bpq_acc_lat;
+    class BouncePendingQueue {
+      struct BouncePendingQueueEntry {
         Addr addr;
-        bool writeLock;
-        bool readLock;
         uint8_t data[64];
-        BounceTableEntry() {
+        int outstandingPkts;
+        BouncePendingQueueEntry() {
           addr = 0;
-          writeLock = readLock = false;
+          outstandingPkts = -1;
         }
-        BounceTableEntry(Addr addr, bool wLock, bool rLock, uint8_t *data) {
+        BouncePendingQueueEntry(Addr addr, uint8_t *data) {
           this->addr = addr;
-          this->writeLock = wLock;
-          this->readLock = rLock;
+          outstandingPkts = -1;
           memcpy(this->data, data, 64);
         }
       };
-      std::map<Addr, BounceTableEntry> m_table;
+      std::map<Addr, BouncePendingQueueEntry> m_table;
 
     public:
-      void insert(Addr addr, uint8_t *data, bool wLock = false, bool rLock = false) {
-        m_table[addr] = BounceTableEntry(addr, wLock, rLock, data);
+      void insert(Addr addr, uint8_t *data) {
+        m_table[addr] = BouncePendingQueueEntry(addr, data);
       }
 
       void remove(Addr addr) {
@@ -85,16 +84,29 @@ class MCSquare : public SimObject {
         return 0;
       }
 
-      bool getWriteLocked(Addr addr) {
-        if(m_table.find(addr) == m_table.end())
-          return false;
-        return m_table[addr].writeLock;
+      int getPkts(Addr addr) {
+        if(m_table.find(addr) != m_table.end())
+          return m_table[addr].outstandingPkts;
+        return 0;
       }
 
-      bool getReadLocked(Addr addr) {
-        if(m_table.find(addr) == m_table.end())
-          return false;
-        return m_table[addr].readLock;
+      bool setPkts(Addr addr, int pkts) {
+        if(m_table.find(addr) != m_table.end())
+          return (m_table[addr].outstandingPkts = pkts);
+        return false;
+      }
+
+      void decPkts(Addr addr, int pkts = 1) {
+        if(m_table.find(addr & (uint64_t)(~63)) != m_table.end())
+          if(m_table[addr & (uint64_t)(~63)].outstandingPkts > 0) {
+            m_table[addr & (uint64_t)(~63)].outstandingPkts -= pkts;
+          }
+
+        if(addr % 64 != 0)
+          if(m_table.find((addr + 64) & (uint64_t)(~63)) != m_table.end())
+            if(m_table[(addr + 64) & (uint64_t)(~63)].outstandingPkts > 0) {
+              m_table[(addr + 64) & (uint64_t)(~63)].outstandingPkts -= pkts;
+            }
       }
 
       uint8_t *getData(Addr addr) {
@@ -123,8 +135,14 @@ class MCSquare : public SimObject {
         return m_table.size();
       }
     };
-
+    
+    // Whether read to dest should create a duplicate write packet
+    const int wb_dest_reads;
   public:
+    int wbDestReads() {
+      return wb_dest_reads;
+    }
+
     enum Types {
       TYPE_NONE = 0,
       TYPE_SRC,
@@ -133,30 +151,33 @@ class MCSquare : public SimObject {
 
     MCSquare(const MCSquareParams &params) : SimObject(params),
       ctt_max_sz(params.ctt_size), ctt_acc_lat(params.ctt_penalty), 
-      bt_max_sz(params.bt_size), bt_acc_lat(params.bt_penalty),
-      stats(*this) {
+      bpq_max_sz(params.bpq_size), bpq_acc_lat(params.bpq_penalty), 
+      wb_dest_reads(params.wb_dest_reads), stats(*this) {
         printf("Created MCSquare with: CTT (%d size, %lu ticks); ", ctt_max_sz, ctt_acc_lat);
-        printf("BT(%d size, %lu ticks)\n", bt_max_sz, bt_acc_lat);
+        printf("BPQ(%d size, %lu ticks)\n", bpq_max_sz, bpq_acc_lat);
       }
 
     // CTT management functions
     void insertEntry(Addr dest, Addr src, uint64_t size);
     void deleteEntry(Addr dest, uint64_t size);
     void splitEntry(PacketPtr pkt);
+    // Check CTT
     Types contains(Addr addr, size_t size);
     Types contains(PacketPtr pkt);
+    bool isSrc(PacketPtr pkt);
+    bool isDest(PacketPtr pkt);
 
     // Bouncing related functions
     bool bounceAddr(PacketPtr pkt);
     std::vector<PacketPtr> genDestReads(PacketPtr pkt);
 
-    BounceTable m_bt;
+    BouncePendingQueue m_bpq;
 
     Tick getCTTPenalty() { return ctt_acc_lat; }
-    Tick getBTPenalty() { return bt_acc_lat; }
+    Tick getBPQPenalty() { return bpq_acc_lat; }
 
     int getMaxCTTSize() { return ctt_max_sz; }
-    int getMaxBTSize() { return bt_max_sz; }
+    int getMaxBPQSize() { return bpq_max_sz; }
 
     struct CtrlStats : public statistics::Group
     {

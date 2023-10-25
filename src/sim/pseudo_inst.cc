@@ -496,7 +496,7 @@ memcpy_elide(ThreadContext *tc, ExecContext *xc,
               "'timing' mode.\n");
     }
     Fault f = xc->writeMem((uint8_t*)src, len, dest, 
-        Request::MEM_ELIDE | Request::NO_TSO, NULL, 
+        Request::MEM_ELIDE, NULL, 
         std::vector<bool>(len, true));
 
     if (f != NoFault) {
@@ -517,7 +517,7 @@ memcpy_elide_free(ThreadContext *tc, ExecContext *xc, Addr dest, uint64_t len)
               "'timing' mode.\n");
     }
     Fault f = xc->writeMem(NULL, len, dest, 
-        Request::MEM_ELIDE_FREE | Request::NO_TSO, NULL, 
+        Request::MEM_ELIDE_FREE, NULL, 
         std::vector<bool>(len, true));
 
     if (f != NoFault) {
