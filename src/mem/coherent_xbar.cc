@@ -497,6 +497,30 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
         return true;
     }
 
+    if(pkt->req->getFlags() & Request::MEM_ELIDE_DEST_WB && pkt->isWrite()) {
+        pkt->cmd = pkt->makeWriteCmd(pkt->req);
+        PortID new_mem_side_port_id = findPort(pkt->getAddrRange());
+        bool success = memSidePorts[new_mem_side_port_id]->sendTimingReq(pkt);
+        DPRINTF(MCSquare, "Forwarding write generated for %lx\n", pkt->getAddr());
+        if(success) {
+            auto req = std::make_shared<Request>(pkt->getAddr(), 
+                pkt->getSize(), Request::MEM_ELIDE_DEST_WB, 
+                pkt->req->funcRequestorId);
+            auto broadcastPkt = Packet::createWrite(req);
+            broadcastPkt->allocate();
+            broadcastPkt->setData(pkt->getPtr<uint8_t>());
+            // Write response which modified elision table. Forward to all memctrls.
+            for(auto i = portMap.begin(); i != portMap.end(); ++i) {
+                if(pkt->getAddrRange().isSubset(AddrRange(i->first.start(), i->first.end())))
+                    if(i->second != new_mem_side_port_id)
+                        memSidePorts[i->second]->sendTimingReq(broadcastPkt);
+            }
+            delete broadcastPkt;
+        } else
+            delete pkt;
+        return true;
+    }
+
     if(pkt->req->getFlags() & Request::MEM_ELIDE_WRITE_DEST && pkt->isWrite()) {
         // Write response which modified elision table. Forward to all memctrls.
         pkt->cmd = pkt->makeWriteCmd(pkt->req);

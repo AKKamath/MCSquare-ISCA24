@@ -812,12 +812,15 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
                 mcsquare->bounceAddr(pkt);
                 mcsquare->stats.destReadSize += pkt->getSize();
                 pkt->req->setFlags(Request::MEM_ELIDE_REDIRECT_SRC);
-                Tick response_time = curTick() + mcsquare->getCTTPenalty() + pkt->headerDelay;
-                // Here we reset the timing of the packet before sending it out.
-                pkt->headerDelay = pkt->payloadDelay = 0;
-                pkt->makeResponse();
-                port.schedTimingResp(pkt, response_time);
-                return true;
+                // Push pkt to redirected source
+                if(pkt->req->_paddr_dest != pkt->getAddr()) {
+                    Tick response_time = curTick() + mcsquare->getCTTPenalty() + pkt->headerDelay;
+                    // Here we reset the timing of the packet before sending it out.
+                    pkt->headerDelay = pkt->payloadDelay = 0;
+                    pkt->makeResponse();
+                    port.schedTimingResp(pkt, response_time);
+                    return true;
+                }
             } else if(mcsquare->isSrc(pkt)) {
                 mcsquare->stats.srcReadSize += pkt->getSize();
                 //DPRINTF(MCSquare, "Found read to src %lx; fallthrough\n", pkt->getAddr());
@@ -849,9 +852,54 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
             if(!weContain)
                 return true;
         }
-    }
 
-    if(mcsquare->m_bpq.find(pkt->getAddr())) {
+        // Writeback generated for a read dest. Accomodate if space allows.
+        if(pkt->req->getFlags() & Request::MEM_ELIDE_DEST_WB) {
+            // Sent as a write to dest. Just ignore.
+            if(!mcsquare->isDest(pkt)) {
+                if(weContain) {
+                    DPRINTF(MCSquare, "Found duplicate generated write to %lx, "
+                            "ignoring this one (%lx)\n", pkt->getAddr(), pkt->req->_paddr_src);
+                }
+                return false;
+            }
+            
+            // See if we can accommodate based on wb option
+            bool hasSpace = true;
+            switch(mcsquare->wbDestReads()) {
+                case 0: // Should not see these packets generated for this opt
+                    assert(false);
+                    break;
+                case 1: // Allow packets as long as space available
+                    hasSpace = totalWriteQueueSize < writeBufferSize;
+                    break;
+                case 2: // Allow if less than 50% full
+                    hasSpace = totalWriteQueueSize < writeBufferSize / 2;
+                    break;
+                case 3: // Allow if less than 75% full
+                    hasSpace = totalWriteQueueSize < 3 * writeBufferSize / 4;
+                    break;
+                case 4: // Allow if less than 90% full
+                    hasSpace = totalWriteQueueSize < 9 * writeBufferSize / 10;
+                    break;
+                default:
+                    fprintf(stderr, "Invalid wb_dest_reads option for MCSquare\n");
+                    assert(false);
+                    break;
+            }
+
+            if(weContain && !hasSpace) {
+                DPRINTF(MCSquare, "Found gen write to %lx, but cannot fit"
+                                  " in WPQ\n", pkt->getAddr());
+                return false;
+            }
+            // We have space. Let this proceed!
+            mcsquare->splitEntry(pkt);
+            checkBounceTable();
+            if(!weContain)
+                return true;
+        }
+    } else if(mcsquare->m_bpq.find(pkt->getAddr())) {
         if(pkt->isWrite()) {
             mcsquare->m_bpq.setData(pkt->getAddr(), pkt->getPtr<uint8_t>());
             DPRINTF(MCSquare, "Found write to src %lx, in bounce table\n", pkt->getAddr());
@@ -1069,6 +1117,8 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
     // response
     panic_if(!mem_intr->getAddrRange().contains(pkt->getAddr()),
              "Can't handle address range for packet %s\n", pkt->print());
+    // TODO_AK: I don't like having so many conditions. Can we somehow move them 
+    // to point of origin and remove the call to accessAndRespond instead?
     if(!mcsquare->m_bpq.find(pkt->getAddr()) 
         // Read to src for a dest bounce
         || (pkt->isRead() && pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) 
@@ -1079,12 +1129,13 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
     else if(pkt->needsResponse())
         pkt->makeResponse();
 
-
     if(pkt->isWrite() && 
        pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
         pkt->deleteData();
         return;
-    } else if(pkt->isRead()) {
+    }
+
+    if(pkt->isRead()) {
         if(pkt->req->getFlags() & Request::MEM_ELIDE_WRITE_SRC &&
            !(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC)) {
             if(mcsquare->isSrc(pkt)) {
@@ -1134,7 +1185,7 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
                     // Make duplicate write to dest if setting enabled
                     if(mcsquare->wbDestReads()) {
                         auto req = std::make_shared<Request>(pkt->getAddr(), 
-                            pkt->getSize(), Request::MEM_ELIDE_REDIRECT_SRC, 
+                            pkt->getSize(), Request::MEM_ELIDE_DEST_WB, 
                             pkt->req->funcRequestorId);
                         auto bouncePkt = Packet::createWrite(req);
                         bouncePkt->allocate();
@@ -1148,13 +1199,7 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
                     }
                 }
             }
-        } /*else if(mcsquare->isDest(pkt)) {
-            mcsquare->bounceAddr(pkt);
-            // Add redirect flag to redirect
-            DPRINTF(MCSquare, "Setting redirect packet! %lx %lx %lx\n", 
-                pkt->req->_paddr_dest, pkt->req->_paddr_src, pkt->getAddr());
-            pkt->req->setFlags(Request::MEM_ELIDE_REDIRECT_SRC);
-        }*/
+        }
     }
 
     // turn packet around to go back to requestor if response expected

@@ -6,18 +6,24 @@ namespace gem5
 
 bool isMCSquare(const RequestPtr req)
 {
+    if(req && req != NULL)
     return req->getFlags() & Request::MEM_ELIDE ||
            req->getFlags() & Request::MEM_ELIDE_FREE;
+    return false;
 }
 
 bool isMCSquare(const gem5::Packet* pkt)
 {
+    if(!pkt)
+        return false;
     return isMCSquare(pkt->req);
 }
 
 bool isMCReq(const gem5::Packet* pkt)
 {
-    return pkt->req->getFlags() & (Request::MEM_ELIDE_WRITE_SRC | Request::MEM_ELIDE_REDIRECT_SRC);
+    bool sourceBounce =  pkt->req->getFlags() & (Request::MEM_ELIDE_WRITE_SRC | Request::MEM_ELIDE_REDIRECT_SRC);
+    bool destWB =  pkt->req->getFlags() & (Request::MEM_ELIDE_DEST_WB);
+    return sourceBounce || destWB;
 }
 
 namespace memory
@@ -99,9 +105,40 @@ MCSquare::insertEntry(Addr dest, Addr src, uint64_t size)
                 DPRINTF(MCSquare, "Redirected src: dest - %lx, (og src %lx) "
                        "now src - %lx, size - %lu\n", 
                        dest, src, temp_src, temp_size);
-                if(dest != temp_src) {
-                    m_ctt.push_back(CTTableEntry(dest, temp_src, temp_size));
+                /*if(dest == temp_src && 
+                    (temp_size > 64 || (dest % 64 == 0 && temp_size == 64))) {
+                    uint64_t temp_size2 = 64 - (dest % 64);
+                    if(temp_size2 != 64) {
+                        m_ctt.push_back(CTTableEntry(dest, temp_src, temp_size2));
+                        DPRINTF(MCSquare, "Added: dest - %lx, src - %lx, size - %lu\n", 
+                                dest, temp_src, temp_size2);
+                        dest      += temp_size2;
+                        temp_src  += temp_size2;
+                        src       += temp_size2;
+                        temp_size -= temp_size2;
+                        size -= temp_size2;
+                    }
+                    uint64_t temp_size3 = temp_size % 64;
+                    dest      += temp_size - temp_size3;
+                    temp_src  += temp_size - temp_size3;
+                    src       += temp_size - temp_size3;
+                    temp_size -= temp_size - temp_size3;
+                    size      -= temp_size - temp_size3;
+                    if(temp_size3 > 0) {
+                        m_ctt.push_back(CTTableEntry(dest, temp_src, temp_size3));
+                        DPRINTF(MCSquare, "Added: dest - %lx, src - %lx, size - %lu\n", 
+                                dest, temp_src, temp_size3);
+                        dest      += temp_size3;
+                        temp_src  += temp_size3;
+                        src       += temp_size3;
+                        temp_size -= temp_size3;
+                        size      -= temp_size3;
+                    }
+
                 }
+                else {*/
+                    m_ctt.push_back(CTTableEntry(dest, temp_src, temp_size));
+                //}
                 dest += temp_size;
                 src  += temp_size;
                 size -= temp_size;
@@ -335,6 +372,7 @@ MCSquare::bounceAddr(PacketPtr pkt)
     
     fprintf(stderr, "%lu: Cannot find bounce entry for packet: dest=%lx, "
         "dest offset = %lu\n", ::gem5::curTick(), pkt->req->_paddr_dest, pkt->mc_dest_offset);
+    //assert(false);
     // Dest was written while a bounce was ongoing.
     pkt->setAddr(pkt->req->_paddr_dest);
     pkt->mc_dest_offset = 0;
@@ -463,8 +501,6 @@ MCSquare::genDestReads(PacketPtr srcPkt)
                 //     <-> (negative offset)
 
                 // Intersects 2 cachelines, because this dest has too little left
-                //Gen read offset = -16, srcpkt addr: a71cd000;  Entry intersect: dest 223736a, src a71cd010, size 22
-                //Cannot find bounce entry for packet: dest=2237380
                 if((offset + 64) + doffset > 64 && (i->size + doffset) > 64) {
                     // 1st packet
                     {

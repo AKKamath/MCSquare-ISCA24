@@ -12,4 +12,4 @@ class MCSquare(SimObject):
     bpq_size = Param.Int(4, "Number of entries that bounce table can hold")
     bpq_penalty = Param.Latency("555ps", "Cycle penalty for bounce table access")
 
-    wb_dest_reads = Param.Int(0, "Whether to writeback reads to destination; 0 = no, 1 = yes, 2 = adaptive")
+    wb_dest_reads = Param.Int(3, "Whether to writeback reads to destination; 0 = no, 1 = yes, 2 = adaptive")

@@ -179,6 +179,8 @@ class Request
         PF_EXCLUSIVE                = 0x02000000,
         /** The request should be marked as LRU. */
         EVICT_NEXT                  = 0x04000000,
+        /** Writeback request generated for dest packet */
+        MEM_ELIDE_DEST_WB           = 0x08000000,
         /** The request should be marked with ACQUIRE. */
         ACQUIRE                     = 0x00020000,
         /** The request should be marked with RELEASE. */
