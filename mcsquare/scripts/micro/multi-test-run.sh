@@ -66,7 +66,7 @@ void memcpy_elide_pgflush(void* dest, void* src, uint64_t len)
     }
 }
 
-void memcpy_elide_clwb(void* dest, void* src, uint64_t len)
+static void memcpy_elide_clwb(void* dest, const void* src, uint64_t len)
 {
     uint64_t temp_src = ((uint64_t)src & ~((uint64_t)63));
     while(temp_src < (uint64_t)src + len) {
@@ -76,22 +76,36 @@ void memcpy_elide_clwb(void* dest, void* src, uint64_t len)
     _mm_mfence();
     // Cacheline-align dest
     uint64_t left_fringe = CL_SIZE - ((uint64_t)dest & (CL_SIZE - 1));
+    temp_src = (uint64_t)src;
     if(left_fringe < CL_SIZE) {
         memcpy(dest, src, left_fringe);
         dest = (void *)((char *)dest + left_fringe);
-        src = (void *)((char *)src + left_fringe);
+        temp_src = ((uint64_t)src + left_fringe);
+        len -= left_fringe;
     }
     while(len > 0) {
         // Calculate remaining size in page for src and dest
-        uint64_t src_off = PAGE_SIZE - ((uint64_t)src & (PAGE_SIZE - 1));
+        uint64_t src_off = PAGE_SIZE - ((uint64_t)temp_src & (PAGE_SIZE - 1));
         uint64_t dest_off = PAGE_SIZE - ((uint64_t)dest & (PAGE_SIZE - 1));
         // Pick minimum size left as elide_size
         uint64_t elide_size = cust_min(cust_min(src_off, dest_off), len);
-        m5_memcpy_elide(dest, src, elide_size);
+        if(elide_size < CL_SIZE) {
+          if(len >= CL_SIZE)
+            elide_size = CL_SIZE;
+          else
+            elide_size = len;
+          memcpy(dest, (void*)temp_src, elide_size);
+        }
+        else {
+          // Make elide size a multiple of 64
+          elide_size &= (~63);
+          m5_memcpy_elide(dest, (void*)temp_src, elide_size);
+        }
         dest = (void *)((char *)dest + elide_size);
-        src = (void *)((char *)src + elide_size);
+        temp_src = (temp_src + elide_size);
         len -= elide_size;
     }
+    _mm_mfence();
 }
 
 void memcpy_elide_free(void* dest, uint64_t len)

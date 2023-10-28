@@ -44,8 +44,8 @@ def extract_ticks(file_path):
 
     return experiment_ticks
 
-sizes=[64, 256, 1024, 4096, 16384, 65536, 262144, 1048576]
-expts=["pgflush_mcsquare", "clwb_mcsquare", "memcpy", "zIO"]
+sizes=[64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304]
+expts=["PG_MCSquare-Flush", "PG_MCSquare-Lazy", "MCSquare-Flush", "MCSquare-Lazy"]
 def main():
     file_path = sys.argv[1]
 

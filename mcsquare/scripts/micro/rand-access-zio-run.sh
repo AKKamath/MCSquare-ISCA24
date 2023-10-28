@@ -13,9 +13,8 @@ echo "
 #include <stdlib.h>
 #include <x86intrin.h>
 #include <string.h>
-#include <sys/syscall.h>         /* Definition of SYS_* constants */
-#include <sys/socket.h>
-#include <string.h>
+#include <algorithm>    // std::shuffle
+#include <random>       // std::default_random_engine
 #define SIZE (1024*4096)
 #define PAGE_SIZE 4096
 #define PAGE_BITS 12
@@ -30,45 +29,76 @@ using namespace std::chrono;
 #define TIME_NOW high_resolution_clock::now()
 #define TIME_DIFF(a, b) duration_cast<microseconds>(a - b).count()
 
+static uint64_t lfsr_fast(uint64_t lfsr)
+{
+  lfsr ^= lfsr >> 7;
+  lfsr ^= lfsr << 9;
+  lfsr ^= lfsr >> 13;
+  return lfsr;
+}
+
 #define TEST_OP(OPERATION, dest, src, size, accesses) \
     reset_op(dest, src, size); \
+    _mm_mfence();  \
     printf(\"Dest: %lu Src: %lu\n\", *dest, *src); \
     _mm_mfence(); \
     m5_reset_stats(0, 0); \
     OPERATION(dest, src, size); \
-    sequential_test(dest, src, size, accesses); \
+    random_test(dest, src, size, accesses); \
+    _mm_mfence(); \
     m5_dump_stats(0, 0); \
     memcpy_elide_free(dest, size);
 
-
-void reset_op(uint64_t* dest, uint64_t* src, uint64_t size) {
-    for(int i = 0; i < size / sizeof(uint64_t); i += PAGE_SIZE / sizeof(uint64_t)) {
-        src[i]  = 500;
-        dest[i] = 100;
+void init_op(uint64_t* dest, uint64_t* src, uint64_t size) {
+    // Set initial values
+    for(int i = 0; i < size / sizeof(uint64_t); i++) {
+        src[i] = i;
+        dest[i] = 0;
     }
+
+    // use a fixed seed:
+    unsigned seed = 100;
+    // Shuffle src into a random walk
+    std::shuffle (src, src + size / sizeof(uint64_t), std::default_random_engine(seed));
 }
 
-void sequential_test(uint64_t* dest, uint64_t* src, uint64_t size, uint64_t accesses) {
-    //auto start = TIME_NOW;
-    uint64_t verify = 0;
-    for(int i = 0; i < accesses; i++) {
-        i = i % ACCESSES;
-        verify += dest[i];
+void reset_op(uint64_t* dest, uint64_t* src, uint64_t size) {
+    memset(dest, 0, size);
+}
+
+void random_test(uint64_t* dest, uint64_t* src, uint64_t size, uint64_t accesses) {
+    uint64_t index = 0;
+    for(uint64_t i = 0; i < accesses; i++) {
+        index = dest[index];
     }
-    //auto stop = TIME_NOW;
-    printf(\"Verify: %lu\n\", verify);
+    printf(\"Verify: %lu\n\", index);
 }
 
 void memcpy_elide_pgflush(void* dest, void* src, uint64_t len)
 {
-    void *temp_dest = (void*)((uint64_t)dest & ~((uint64_t)63));
-    void *temp_src = (void*)((uint64_t)src & ~((uint64_t)63));
-    uint64_t pages = (len >> PAGE_BITS) + (len & ((1 << PAGE_BITS) - 1) ? 1 : 0);
-    for (uint64_t page = 0; page < pages; ++page) {
-        _mm_clwb( (void*)((uint64_t)temp_src + (page << PAGE_BITS)) );
-        _mm_mfence();
-        m5_memcpy_elide((void*)((uint64_t)temp_dest + (page << PAGE_BITS)),
-            (void*)((uint64_t)temp_src + (page << PAGE_BITS)), PAGE_SIZE);
+    uint64_t temp_src = ((uint64_t)src & ~((uint64_t)63));
+    while(temp_src < (uint64_t)src + len) {
+        _mm_clwb( (void*)temp_src );
+        temp_src += PAGE_SIZE;
+    }
+    _mm_mfence();
+    // Cacheline-align dest
+    uint64_t left_fringe = CL_SIZE - ((uint64_t)dest & (CL_SIZE - 1));
+    if(left_fringe < CL_SIZE) {
+        memcpy(dest, src, left_fringe);
+        dest = (void *)((char *)dest + left_fringe);
+        src = (void *)((char *)src + left_fringe);
+    }
+    while(len > 0) {
+        // Calculate remaining size in page for src and dest
+        uint64_t src_off = PAGE_SIZE - ((uint64_t)src & (PAGE_SIZE - 1));
+        uint64_t dest_off = PAGE_SIZE - ((uint64_t)dest & (PAGE_SIZE - 1));
+        // Pick minimum size left as elide_size
+        uint64_t elide_size = cust_min(cust_min(src_off, dest_off), len);
+        m5_memcpy_elide(dest, src, elide_size);
+        dest = (void *)((char *)dest + elide_size);
+        src = (void *)((char *)src + elide_size);
+        len -= elide_size;
     }
 }
 
@@ -140,25 +170,7 @@ int main(int argc, char *argv[])
     uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size + 16);
     uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
     test1 = (uint64_t*)((uint64_t)test1 + 16);
-    printf(\"%p\n\", test1);
-    printf(\"%p\n\", test2);
-    TEST_OP(memcpy_elide_pgflush, test2, test1, size, 0);
-    TEST_OP(memcpy_elide_pgflush, test2, test1, size, ACCESSES / 8);
-    TEST_OP(memcpy_elide_pgflush, test2, test1, size, ACCESSES / 4);
-    TEST_OP(memcpy_elide_pgflush, test2, test1, size, ACCESSES / 2);
-    TEST_OP(memcpy_elide_pgflush, test2, test1, size, ACCESSES);
-    //TEST_OP(memcpy_elide_pgflush, test2, test1, size, (2 * ACCESSES));
-    return 0;
-}
-" > test_pgflush.cpp;
-echo "
-#include \"test_headers.h\"
-int main(int argc, char *argv[])
-{
-    size_t size = SIZE;
-    uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size + 16);
-    uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
-    test1 = (uint64_t*)((uint64_t)test1 + 16);
+    init_op(test2, test1, size);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
     TEST_OP(memcpy_elide_clwb, test2, test1, size, 0);
@@ -170,6 +182,7 @@ int main(int argc, char *argv[])
     return 0;
 }
 " > test_clwb.cpp;
+
 echo "
 #include \"test_headers.h\"
 int main(int argc, char *argv[])
@@ -177,6 +190,7 @@ int main(int argc, char *argv[])
     size_t size = SIZE;
     uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
     uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
+    init_op(test2, test1, size);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
     TEST_OP(memcpy_elide_clwb, test2, test1, size, 0);
@@ -188,6 +202,7 @@ int main(int argc, char *argv[])
     return 0;
 }
 " > test_clwb_align.cpp;
+
 echo "
 #include \"test_headers.h\"
 int main(int argc, char *argv[])
@@ -196,6 +211,7 @@ int main(int argc, char *argv[])
     uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size + 16);
     uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
     test1 = (uint64_t*)((uint64_t)test1 + 16);
+    init_op(test2, test1, size);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
     TEST_OP(memcpy, test2, test1, size, 0);
@@ -207,6 +223,7 @@ int main(int argc, char *argv[])
     return 0;
 }
 " > test_memcpy.cpp;
+
 echo "
 #include \"test_headers.h\"
 int main(int argc, char *argv[])
@@ -214,6 +231,7 @@ int main(int argc, char *argv[])
     size_t size = SIZE;
     uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
     uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
+    init_op(test2, test1, size);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
     TEST_OP(memcpy, test2, test1, size, 0);
@@ -225,8 +243,7 @@ int main(int argc, char *argv[])
     return 0;
 }
 " > test_memcpy_align.cpp;
-
-tests="test_clwb test_clwb_align"
+tests="test_memcpy test_memcpy_align"
 for i in $tests; do
     g++ $i.cpp -o $i -lrt -g -march=native -I../include ../util/m5/build/x86/out/libm5.a
 done
@@ -238,11 +255,8 @@ pushd ${ZIO};
 make
 ls
 popd;
-
-echo "Done compilation"
 m5 exit
 
-for i in $tests; do
-    ./$i
-done
+LD_PRELOAD=${ZIO_BIN} ./test_memcpy
+LD_PRELOAD=${ZIO_BIN} ./test_memcpy_align
 m5 exit

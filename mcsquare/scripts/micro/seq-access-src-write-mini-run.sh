@@ -16,7 +16,7 @@ echo "
 #include <sys/syscall.h>         /* Definition of SYS_* constants */
 #include <sys/socket.h>
 #include <string.h>
-#define SIZE (1024*4096)
+#define SIZE (4096)
 #define PAGE_SIZE 4096
 #define PAGE_BITS 12
 #define CL_SIZE 64
@@ -32,31 +32,57 @@ using namespace std::chrono;
 
 #define TEST_OP(OPERATION, dest, src, size, accesses) \
     reset_op(dest, src, size); \
-    printf(\"Dest: %lu Src: %lu\n\", *dest, *src); \
     _mm_mfence(); \
     m5_reset_stats(0, 0); \
     OPERATION(dest, src, size); \
     sequential_test(dest, src, size, accesses); \
+    _mm_mfence(); \
     m5_dump_stats(0, 0); \
     memcpy_elide_free(dest, size);
 
-
 void reset_op(uint64_t* dest, uint64_t* src, uint64_t size) {
-    for(int i = 0; i < size / sizeof(uint64_t); i += PAGE_SIZE / sizeof(uint64_t)) {
-        src[i]  = 500;
+    for(int i = 0; i < size / sizeof(uint64_t); i++) {
+        src[i]  = i;
         dest[i] = 100;
     }
 }
 
 void sequential_test(uint64_t* dest, uint64_t* src, uint64_t size, uint64_t accesses) {
-    //auto start = TIME_NOW;
-    uint64_t verify = 0;
     for(int i = 0; i < accesses; i++) {
-        i = i % ACCESSES;
-        verify += dest[i];
+        src[i] = 200 + i;
     }
-    //auto stop = TIME_NOW;
-    printf(\"Verify: %lu\n\", verify);
+
+    for(int i = 0; i < accesses; i += CL_SIZE / sizeof(uint64_t)) {
+        _mm_clflushopt(&src[i]);
+    }
+    _mm_mfence();
+
+    bool correct = true;
+    for(int i = 0; i < accesses; i += CL_SIZE / sizeof(uint64_t)) {
+        if(dest[i] != i) {
+            correct = false;
+            printf(\"Dest: Found %lu want %d\n\", dest[i], i);
+        }
+    }
+    for(int i = 0; i < accesses; i += CL_SIZE / sizeof(uint64_t)) {
+        if(src[i] != 200 + i) {
+            correct = false;
+            printf(\"Src: Found %lu, expected %d\n\", src[i], i);
+        }
+    }
+    printf(\"Correct? %d\n\", correct);
+}
+
+void verify(uint64_t* dest, uint64_t* src, uint64_t size, uint64_t accesses) {
+    printf(\"Verify: \");
+    for(int i = 0; i < accesses; i++) {
+        printf(\"%lu, \", dest[i]);
+    }
+    printf(\"\n\");
+    for(int i = 0; i < accesses; i++) {
+        printf(\"%lu, \", src[i]);
+    }
+    printf(\"\n\");
 }
 
 void memcpy_elide_pgflush(void* dest, void* src, uint64_t len)
@@ -142,31 +168,7 @@ int main(int argc, char *argv[])
     test1 = (uint64_t*)((uint64_t)test1 + 16);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
-    TEST_OP(memcpy_elide_pgflush, test2, test1, size, 0);
-    TEST_OP(memcpy_elide_pgflush, test2, test1, size, ACCESSES / 8);
-    TEST_OP(memcpy_elide_pgflush, test2, test1, size, ACCESSES / 4);
-    TEST_OP(memcpy_elide_pgflush, test2, test1, size, ACCESSES / 2);
-    TEST_OP(memcpy_elide_pgflush, test2, test1, size, ACCESSES);
-    //TEST_OP(memcpy_elide_pgflush, test2, test1, size, (2 * ACCESSES));
-    return 0;
-}
-" > test_pgflush.cpp;
-echo "
-#include \"test_headers.h\"
-int main(int argc, char *argv[])
-{
-    size_t size = SIZE;
-    uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size + 16);
-    uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
-    test1 = (uint64_t*)((uint64_t)test1 + 16);
-    printf(\"%p\n\", test1);
-    printf(\"%p\n\", test2);
-    TEST_OP(memcpy_elide_clwb, test2, test1, size, 0);
-    TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 8);
-    TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 4);
-    TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 2);
     TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES);
-    //TEST_OP(memcpy_elide_clwb, test2, test1, size, (2 * ACCESSES));
     return 0;
 }
 " > test_clwb.cpp;
@@ -175,69 +177,20 @@ echo "
 int main(int argc, char *argv[])
 {
     size_t size = SIZE;
-    uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
-    uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
-    printf(\"%p\n\", test1);
-    printf(\"%p\n\", test2);
-    TEST_OP(memcpy_elide_clwb, test2, test1, size, 0);
-    TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 8);
-    TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 4);
-    TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 2);
-    TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES);
-    //TEST_OP(memcpy_elide_clwb, test2, test1, size, (2 * ACCESSES));
-    return 0;
-}
-" > test_clwb_align.cpp;
-echo "
-#include \"test_headers.h\"
-int main(int argc, char *argv[])
-{
-    size_t size = SIZE;
     uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size + 16);
     uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
     test1 = (uint64_t*)((uint64_t)test1 + 16);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
-    TEST_OP(memcpy, test2, test1, size, 0);
-    TEST_OP(memcpy, test2, test1, size, ACCESSES / 8);
-    TEST_OP(memcpy, test2, test1, size, ACCESSES / 4);
-    TEST_OP(memcpy, test2, test1, size, ACCESSES / 2);
     TEST_OP(memcpy, test2, test1, size, ACCESSES);
-    //TEST_OP(memcpy, test2, test1, size, (2 * ACCESSES));
     return 0;
 }
 " > test_memcpy.cpp;
-echo "
-#include \"test_headers.h\"
-int main(int argc, char *argv[])
-{
-    size_t size = SIZE;
-    uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
-    uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
-    printf(\"%p\n\", test1);
-    printf(\"%p\n\", test2);
-    TEST_OP(memcpy, test2, test1, size, 0);
-    TEST_OP(memcpy, test2, test1, size, ACCESSES / 8);
-    TEST_OP(memcpy, test2, test1, size, ACCESSES / 4);
-    TEST_OP(memcpy, test2, test1, size, ACCESSES / 2);
-    TEST_OP(memcpy, test2, test1, size, ACCESSES);
-    //TEST_OP(memcpy, test2, test1, size, (2 * ACCESSES));
-    return 0;
-}
-" > test_memcpy_align.cpp;
 
-tests="test_clwb test_clwb_align"
+tests="test_clwb test_memcpy"
 for i in $tests; do
     g++ $i.cpp -o $i -lrt -g -march=native -I../include ../util/m5/build/x86/out/libm5.a
 done
-
-ZIO=/home/akkamath/zIO
-ZIO_BIN=${ZIO}/copy_interpose.so
-
-pushd ${ZIO};
-make
-ls
-popd;
 
 echo "Done compilation"
 m5 exit

@@ -178,10 +178,30 @@ int main(int argc, char *argv[])
     TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 4);
     TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 2);
     TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES);
-    TEST_OP(memcpy_elide_clwb, test2, test1, size, (2 * ACCESSES));
+    //TEST_OP(memcpy_elide_clwb, test2, test1, size, (2 * ACCESSES));
     return 0;
 }
 " > test_clwb.cpp;
+
+echo "
+#include \"test_headers.h\"
+int main(int argc, char *argv[])
+{
+    size_t size = SIZE;
+    uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
+    uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
+    init_op(test2, test1, size);
+    printf(\"%p\n\", test1);
+    printf(\"%p\n\", test2);
+    TEST_OP(memcpy_elide_clwb, test2, test1, size, 0);
+    TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 8);
+    TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 4);
+    TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 2);
+    TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES);
+    //TEST_OP(memcpy_elide_clwb, test2, test1, size, (2 * ACCESSES));
+    return 0;
+}
+" > test_clwb_align.cpp;
 
 echo "
 #include \"test_headers.h\"
@@ -199,27 +219,38 @@ int main(int argc, char *argv[])
     TEST_OP(memcpy, test2, test1, size, ACCESSES / 4);
     TEST_OP(memcpy, test2, test1, size, ACCESSES / 2);
     TEST_OP(memcpy, test2, test1, size, ACCESSES);
-    TEST_OP(memcpy, test2, test1, size, (2 * ACCESSES));
+    //TEST_OP(memcpy, test2, test1, size, (2 * ACCESSES));
     return 0;
 }
 " > test_memcpy.cpp;
-tests="test_clwb test_memcpy"
+
+echo "
+#include \"test_headers.h\"
+int main(int argc, char *argv[])
+{
+    size_t size = SIZE;
+    uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
+    uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
+    init_op(test2, test1, size);
+    printf(\"%p\n\", test1);
+    printf(\"%p\n\", test2);
+    TEST_OP(memcpy, test2, test1, size, 0);
+    TEST_OP(memcpy, test2, test1, size, ACCESSES / 8);
+    TEST_OP(memcpy, test2, test1, size, ACCESSES / 4);
+    TEST_OP(memcpy, test2, test1, size, ACCESSES / 2);
+    TEST_OP(memcpy, test2, test1, size, ACCESSES);
+    //TEST_OP(memcpy, test2, test1, size, (2 * ACCESSES));
+    return 0;
+}
+" > test_memcpy_align.cpp;
+tests="test_clwb test_clwb_align"
 for i in $tests; do
     g++ $i.cpp -o $i -lrt -g -march=native -I../include ../util/m5/build/x86/out/libm5.a
 done
-
-ZIO=/home/akkamath/zIO
-ZIO_BIN=${ZIO}/copy_interpose.so
-
-pushd ${ZIO};
-make
-ls
-popd;
 
 echo "Done compilation"
 m5 exit
 for i in $tests; do
     ./$i
 done
-LD_PRELOAD=${ZIO_BIN} ./test_memcpy
 m5 exit

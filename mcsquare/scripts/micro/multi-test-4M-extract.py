@@ -29,8 +29,23 @@ def extract_cycles(file_path):
 
     return experiment_cycles
 
+def extract_ticks(file_path):
+    with open(file_path, 'r') as file:
+        data = file.readlines()
+
+    # Dictionary to hold experiment cycles
+    experiment_ticks = []
+
+    for line in data:
+        # Regex to match your data format
+        match = re.match(r"simTicks\s+(\d+)", line.strip())
+        if match:
+            experiment_ticks.append(int(match.group(1)))
+
+    return experiment_ticks
+
 sizes=["4MB"]
-expts=["pgflush_mcsquare", "clflush_mcsquare", "clflush_src_mcsquare", "memcpy", "zIO"]
+expts=["pgflush_mcsquare", "MCSquare", "memcpy", "zIO"]
 def main():
     file_path = sys.argv[1]
     experiment_cycles = extract_cycles(file_path)
@@ -45,6 +60,21 @@ def main():
         print("%s" % size, end="\t"),
         for expt in expts:
             print("%d" % experiment_cycles[i], end="\t"),
+            i += 1
+        print()
+
+    experiment_ticks = extract_ticks(file_path)
+    print("Total ticks")
+    print("size", end="\t")
+    for expt in expts:
+        print("%s" % expt, end="\t"),
+    print(""),
+
+    i = 0
+    for size in sizes:
+        print("%s" % size, end="\t"),
+        for expt in expts:
+            print("%d" % experiment_ticks[i], end="\t"),
             i += 1
         print()
 

@@ -23,6 +23,12 @@ def extract_cycles(file_path):
                 
             max_cycles = max(max_cycles, cycles)
             experiment_number += 1
+        else:
+            match = re.match(r"system\.switch_cpus\.numCycles\s+(\d+)", line.strip())
+            if match:
+                max_cycles = int(match.group(1))
+                experiment_cycles.append(max_cycles)
+                experiment_number += 1
     
     # Append the max cycles for the last experiment
     experiment_cycles.append(max_cycles)
@@ -44,42 +50,48 @@ def extract_ticks(file_path):
 
     return experiment_ticks
 
-sizes=[64, 256, 1024, 4096, 16384, 65536, 262144, 1048576]
-expts=["pgflush_mcsquare", "clwb_mcsquare", "memcpy", "zIO"]
+sizes=["0%", "12.5%", "25%", "50%", "100%"]
 def main():
     file_path = sys.argv[1]
+    configs = sys.argv[2]
 
-    experiment_cycles = extract_cycles(file_path)
     print("Max CPU cycles")
-    print("size", end="\t")
-    for expt in expts:
-        print("%s" % expt, end="\t"),
-    print(""),
-
-    i = 0
+    print("", end="\t")
     for size in sizes:
         print("%s" % size, end="\t"),
-        for expt in expts:
-            print("%d" % experiment_cycles[i], end="\t"),
+    print("")
+
+    for config in configs.split():
+        file_name = file_path + config + "/stats.txt"
+        experiment_cycles = extract_cycles(file_name)
+
+        i = 0
+        print("%s" % config, end="\t")
+        for size in experiment_cycles:
+            print("%d" % size, end="\t")
             i += 1
         print()
-    print()
 
-    experiment_ticks = extract_ticks(file_path)
     print("Total ticks")
-    print("size", end="\t")
-    for expt in expts:
-        print("%s" % expt, end="\t"),
-    print(""),
-
-    i = 0
+    print("", end="\t")
     for size in sizes:
         print("%s" % size, end="\t"),
-        for expt in expts:
-            print("%d" % experiment_ticks[i], end="\t"),
-            i += 1
-        print()
+    print(""),
+    for config in configs.split():
+        file_name = file_path + config + "/stats.txt"
+        experiment_ticks = extract_ticks(file_name)
 
+        i = 0
+        print("%s" % config, end="\t")
+        for size in experiment_ticks:
+            print("%d" % size, end="\t")
+            i += 1
+            if i % len(sizes) == 0 and len(experiment_ticks) > i:
+                if i == 2 * len(sizes):
+                    break
+                print()
+                print("%s-align" % config, end="\t")
+        print()
 
 if __name__ == "__main__":
     main()

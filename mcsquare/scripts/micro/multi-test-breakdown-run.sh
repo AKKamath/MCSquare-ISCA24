@@ -14,20 +14,20 @@ echo "
 #include <x86intrin.h>
 #include <string.h>
 #define PAGE_SIZE 4096
+#define CL_SIZE 64
 #define PAGE_BITS 12
 #define CL_BITS 6
+
+#define cust_min(a, b) (((a) < (b)) ? (a) : (b))
 
 #define TEST_OP(OPERATION) \
     reset_op(test2, test1, size); \
     _mm_mfence();  \
-    m5_reset_stats(0, 0); \
     OPERATION; \
     _mm_mfence(); \
-    m5_dump_stats(0, 0); \
     printf(\"Dest: %d Src: %d\n\", *test2, *test1); \
     fflush(stdout); \
     memcpy_elide_free(test2, size);
-
 
 void reset_op(int* dest, int* src, uint64_t size) {
     for(int i = 0; i < size / sizeof(int); i += PAGE_SIZE / sizeof(int)) {
@@ -38,25 +38,47 @@ void reset_op(int* dest, int* src, uint64_t size) {
 
 void memcpy_elide_pgflush(void* dest, void* src, uint64_t len)
 {
-    void *temp_dest = (void*)((uint64_t)dest & ~((uint64_t)63));
-    void *temp_src = (void*)((uint64_t)src & ~((uint64_t)63));
-    uint64_t pages = (len >> PAGE_BITS) + (len & ((1 << PAGE_BITS) - 1) ? 1 : 0);
-    for (uint64_t page = 0; page < pages; ++page) {
-        _mm_clwb( (void*)((uint64_t)temp_src + (page << PAGE_BITS)) );
-        _mm_mfence();
-        m5_memcpy_elide((void*)((uint64_t)temp_dest + (page << PAGE_BITS)),
-            (void*)((uint64_t)temp_src + (page << PAGE_BITS)), PAGE_SIZE);
+    m5_reset_stats(0, 0);
+    uint64_t temp_src = ((uint64_t)src & ~((uint64_t)63));
+    while(temp_src < (uint64_t)src + len) {
+        _mm_clwb( (void*)temp_src );
+        temp_src += PAGE_SIZE;
     }
+    _mm_mfence();
+    m5_dump_stats(0, 0);
+
+    // Cacheline-align dest
+    uint64_t left_fringe = CL_SIZE - ((uint64_t)dest & (CL_SIZE - 1));
+    if(left_fringe < CL_SIZE) {
+        memcpy(dest, src, left_fringe);
+        dest = (void *)((char *)dest + left_fringe);
+        src = (void *)((char *)src + left_fringe);
+    }
+    while(len > 0) {
+        // Calculate remaining size in page for src and dest
+        uint64_t src_off = PAGE_SIZE - ((uint64_t)src & (PAGE_SIZE - 1));
+        uint64_t dest_off = PAGE_SIZE - ((uint64_t)dest & (PAGE_SIZE - 1));
+        // Pick minimum size left as elide_size
+        uint64_t elide_size = cust_min(cust_min(src_off, dest_off), len);
+        m5_memcpy_elide(dest, src, elide_size);
+        dest = (void *)((char *)dest + elide_size);
+        src = (void *)((char *)src + elide_size);
+        len -= elide_size;
+    }
+    m5_dump_stats(0, 0);
 }
 
-void memcpy_elide_clflush(void* dest, void* src, uint64_t len)
+static void memcpy_elide_clwb(void* dest, const void* src, uint64_t len)
 {
+    m5_reset_stats(0, 0);
     uint64_t temp_src = ((uint64_t)src & ~((uint64_t)63));
     while(temp_src < (uint64_t)src + len) {
         _mm_clwb( (void*)temp_src );
         temp_src += CL_SIZE;
     }
     _mm_mfence();
+    m5_dump_stats(0, 0);
+    m5_reset_stats(0, 0);
     // Cacheline-align dest
     uint64_t left_fringe = CL_SIZE - ((uint64_t)dest & (CL_SIZE - 1));
     temp_src = (uint64_t)src;
@@ -89,6 +111,7 @@ void memcpy_elide_clflush(void* dest, void* src, uint64_t len)
         len -= elide_size;
     }
     _mm_mfence();
+    m5_dump_stats(0, 0);
 }
 
 void memcpy_elide_free(void* dest, uint64_t len)
@@ -98,7 +121,7 @@ void memcpy_elide_free(void* dest, uint64_t len)
 }
 " > test_headers.h
 
-sizes=(4194304)
+sizes=(64 256 1024 4096 16384 65536 262144 1048576 4194304)
 for i in ${sizes[@]}; do
     echo ${i};
     echo "
@@ -116,32 +139,11 @@ for i in ${sizes[@]}; do
 
         printf(\"%p\n\", test1);
         printf(\"%p\n\", test2);
-        TEST_OP(memcpy_elide_clflush(test2, test1, size));
-
-        printf(\"%p\n\", test1);
-        printf(\"%p\n\", test2);
-        TEST_OP(memcpy(test2, test1, size));
+        TEST_OP(memcpy_elide_clwb(test2, test1, size));
         return 0;
     }
     " > test_all_${i}.cpp;
     g++ test_all_$i.cpp -o test_all_$i -lrt -g -march=native -I../include ../util/m5/build/x86/out/libm5.a
-    
-    echo "
-    #include \"test_headers.h\"
-    int main(int argc, char *argv[])
-    {
-        size_t size;
-        int *test1, *test2;
-        size = ${i};
-        test1 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
-        test2 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
-        printf(\"%p\n\", test1);
-        printf(\"%p\n\", test2);
-        TEST_OP(memcpy(test2, test1, size));
-        return 0;
-    }
-    " > test_memcpy_${i}.cpp;
-    g++ test_memcpy_$i.cpp -o test_memcpy_$i -lrt -g -march=native -I../include ../util/m5/build/x86/out/libm5.a
 done
 
 
@@ -160,7 +162,6 @@ m5 exit
 for i in ${sizes[@]}; do
     echo "Test: size $i"
     ./test_all_$i
-    LD_PRELOAD=${ZIO_BIN} ./test_memcpy_$i
 done
 
 # All done!

@@ -226,7 +226,7 @@ int main(int argc, char *argv[])
 }
 " > test_memcpy_align.cpp;
 
-tests="test_clwb test_clwb_align"
+tests="test_memcpy test_memcpy_align"
 for i in $tests; do
     g++ $i.cpp -o $i -lrt -g -march=native -I../include ../util/m5/build/x86/out/libm5.a
 done
@@ -242,7 +242,6 @@ popd;
 echo "Done compilation"
 m5 exit
 
-for i in $tests; do
-    ./$i
-done
+LD_PRELOAD=${ZIO_BIN} ./test_memcpy
+LD_PRELOAD=${ZIO_BIN} ./test_memcpy_align
 m5 exit

@@ -78,6 +78,30 @@ def cmd_line_template():
         return open(args.command_line_file).read().strip()
     return None
 
+def addMCOptions(parser):
+    parser.add_argument(
+        "--bpq-size",
+        default=4,
+        type=int,
+        action="store",
+        help="Size of Bounce Pending Queue.",
+    )
+    parser.add_argument(
+        "--ctt-size",
+        default=16384,
+        type=int,
+        action="store",
+        help="Size of Copy Tracking Table.",
+    )
+    parser.add_argument(
+        "--wb-reads",
+        default=2,
+        type=int,
+        action="store",
+        help="Whether to writeback generated dest reads. (0 = no, 1 = always, " +
+             "2 = if WPQ is less than half full)",
+    )
+
 def build_test_system(np):
     cmdline = cmd_line_template()
     isa = get_runtime_isa()
@@ -302,6 +326,7 @@ def build_drive_system(np):
 parser = argparse.ArgumentParser()
 Options.addCommonOptions(parser)
 Options.addFSOptions(parser)
+addMCOptions(parser)
 
 # Add the ruby specific and protocol specific args
 if '--ruby' in sys.argv:
@@ -336,6 +361,11 @@ else:
 np = args.num_cpus
 
 test_sys = build_test_system(np)
+
+for i in range(len(test_sys.mem_ctrls)):
+    test_sys.mem_ctrls[i].mcsquare.ctt_size = args.ctt_size
+    test_sys.mem_ctrls[i].mcsquare.bpq_size = args.bpq_size
+    test_sys.mem_ctrls[i].mcsquare.wb_dest_reads = args.wb_reads
 
 if len(bm) == 2:
     drive_sys = build_drive_system(np)

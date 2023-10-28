@@ -226,18 +226,10 @@ int main(int argc, char *argv[])
 }
 " > test_memcpy_align.cpp;
 
-tests="test_clwb test_clwb_align"
+tests="test_memcpy test_memcpy_align"
 for i in $tests; do
     g++ $i.cpp -o $i -lrt -g -march=native -I../include ../util/m5/build/x86/out/libm5.a
 done
-
-ZIO=/home/akkamath/zIO
-ZIO_BIN=${ZIO}/copy_interpose.so
-
-pushd ${ZIO};
-make
-ls
-popd;
 
 echo "Done compilation"
 m5 exit
