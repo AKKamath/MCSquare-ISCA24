@@ -1,6 +1,6 @@
 FLAGS = -O3 -g -Wall -lrt -march=native
 INCLUDES = -I. -I../../include 
-EXEC = mc_interpose.so mc_interpose_free.so mc_interpose_fake.so test.exe test_explicit.exe
+EXEC = mc_interpose.so mc_interpose_free.so mc_interpose_fake.so test.exe test_explicit.exe redis_mc_interpose.so
 
 all: ${EXEC}
 
