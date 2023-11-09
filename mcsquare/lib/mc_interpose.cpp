@@ -36,7 +36,7 @@
 #include <malloc.h>
 #include "mcsquare.h"
 
-#define OPT_THRESHOLD 1024
+#define OPT_THRESHOLD 1023
 
 static void *(*libc_malloc)(size_t size) = NULL;
 static ssize_t (*libc_recv)(int sockfd, void *buf, size_t len, int flags) = NULL;
