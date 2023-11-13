@@ -46,10 +46,13 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
+
+#define TIME_MEMCPY
+uint64_t time_flush = 0, time_elide = 0, time_copy = 0, time_lazy_total = 0;
 #include "mcsquare.h"
 #define MEM_BARRIER() __asm__ volatile("" ::: "memory")
 
-#define OPT_THRESHOLD 2048
+#define OPT_THRESHOLD 64000
 
 #define LOGON 0
 #if LOGON
@@ -62,25 +65,11 @@
 
 #define LOG_STATS(...) fprintf(stderr, __VA_ARGS__)
 
-#define print(addr1, addr2, len)                                               \
-  do {                                                                         \
-    const int is_only_addr1 = (addr1 && !addr2);                               \
-    const int is_only_addr2 = (!addr1 && addr2);                               \
-    if (is_only_addr1) {                                                       \
-      fprintf(stdout, "%s len:%zu %p(%lu)\n", __func__, len, addr1,            \
-              (uint64_t)addr1 &PAGE_MASK);                                     \
-    } else if (is_only_addr2) {                                                \
-      fprintf(stdout, "%s len:%zu %p(%lu)\n", __func__, len, addr2,            \
-              (uint64_t)addr2 &PAGE_MASK);                                     \
-    } else {                                                                   \
-      fprintf(stdout, "%s len:%zu %p(%lu)->%p(%lu)\n", __func__, len, addr1,   \
-              (uint64_t)addr1 &PAGE_MASK, addr2, (uint64_t)addr2 &PAGE_MASK);  \
-    }                                                                          \
-  } while (0)
-
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
 #define IOV_MAX_CNT 10000
+
+uint64_t time_search = 0, time_insert = 0, time_other = 0;
 
 #if ENABLED_LOCK
 pthread_mutex_t mu;
@@ -150,7 +139,9 @@ void *memcpy(void *dest, const void *src, size_t n) {
   pthread_mutex_lock(&mu);
 #endif
 
+  uint64_t start = rdtsc();
   snode *src_entry = skiplist_search_buffer_fallin(&addr_list, core_src_buffer_addr);
+  time_search += rdtsc() - start;
   if (src_entry) {
 #if LOGON
     LOG("[%s] found src entry\n", __func__);
@@ -172,7 +163,9 @@ void *memcpy(void *dest, const void *src, size_t n) {
     if (dest_entry.len > OPT_THRESHOLD) {
       //if (PAGE_ALIGN_DOWN(dest_entry.addr) !=
       //    PAGE_ALIGN_DOWN(dest_entry.orig)) {
+        start = rdtsc();
         skiplist_insert_entry(&addr_list, &dest_entry);
+        time_insert = rdtsc() - start;
         memcpy_elide_clwb(dest, src, n);
 
         LOG("[%s] tracking buffer %p-%p len:%lu\n", __func__,
@@ -201,6 +194,7 @@ void *memcpy(void *dest, const void *src, size_t n) {
 
     // can be partial copy
     ++num_fast_copy;
+    fprintf(stderr, "Copies %lu time: search_total %lu, insert %lu, flush %lu, copy %lu, elide %lu, copy_total %lu\n", num_fast_copy, time_search, time_insert, time_flush, time_copy, time_elide, time_lazy_total);
 
 #if ENABLED_LOCK
     pthread_mutex_unlock(&mu);
