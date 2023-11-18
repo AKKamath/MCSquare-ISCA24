@@ -109,13 +109,6 @@ static ssize_t (*libc_read)(int fd, void *buf, size_t count) = NULL;
 
 skiplist addr_list;
 
-static inline uint64_t rdtsc(void)
-{
-    uint32_t eax, edx;
-    asm volatile ("rdtsc" : "=a" (eax), "=d" (edx));
-    return ((uint64_t) edx << 32) | eax;
-}
-
 void print_trace(void) {
   char **strings;
   size_t i, size;
