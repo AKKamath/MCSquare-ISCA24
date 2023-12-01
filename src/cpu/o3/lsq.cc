@@ -989,9 +989,9 @@ LSQ::MemElideRequest::finish(const Fault &fault, const RequestPtr &req,
                 _reqs[0]->_paddr_dest = LSQRequest::req(0)->getPaddr();
                 _reqs[0]->_vaddr_src = LSQRequest::req(1)->getVaddr();
                 _reqs[0]->_paddr_src = LSQRequest::req(1)->getPaddr();
-                //printf("MemElide, translated dest %lx to %lx, src %lx to %lx\n", 
-                //       _reqs[0]->_vaddr_dest, _reqs[0]->_paddr_dest, 
-                //       _reqs[0]->_vaddr_src,  _reqs[0]->_paddr_src);
+                DPRINTF(MCSquare, "MemElide, translated dest %lx to %lx, src %lx to %lx\n", 
+                       _reqs[0]->_vaddr_dest, _reqs[0]->_paddr_dest, 
+                       _reqs[0]->_vaddr_src,  _reqs[0]->_paddr_src);
             } else {
                 _inst->fault = (_fault[0] != NoFault ? _fault[0] : _fault[1]);
                 setState(State::Fault);
@@ -1245,9 +1245,13 @@ void
 LSQ::LSQRequest::sendFragmentToTranslation(int i)
 {
     numInTranslationFragments++;
+    bool isReadOp = isLoad() || req(i)->isCacheClean();
+    // Memcpy freeing counts as read
+    isReadOp |= (req(i)->getFlags() & Request::MEM_ELIDE_FREE);
+    // Memcpy counts as read only for src, where i = 1
+    isReadOp |= ((req(i)->getFlags() & Request::MEM_ELIDE) && i == 1);
     _port.getMMUPtr()->translateTiming(req(i), _inst->thread->getTC(), this, 
-        isLoad() || req(i)->isCacheClean() || isMCSquare(req(i)) ? 
-        BaseMMU::Read : BaseMMU::Write);
+        isReadOp ? BaseMMU::Read : BaseMMU::Write);
 }
 
 void

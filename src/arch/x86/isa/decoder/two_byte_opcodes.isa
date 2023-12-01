@@ -194,14 +194,8 @@
             0x3: Inst::UD2();
             0x4: BasicMemInst::memElideOp({{
                 bool recognized = true;
-                uint64_t fault_ptr;
-                recognized = pseudo_inst::pseudoInst<X86PseudoInstABI>(
-                    xc->tcBase(), IMMEDIATE, fault_ptr, xc);
-                if(fault_ptr != 0) {
-                    Fault temp_fault = *(Fault*)fault_ptr;
-                    fault = temp_fault;
-                    free((Fault*)fault_ptr);
-                }
+                recognized = pseudo_inst::MemElideInst<X86PseudoInstABI>(
+                    xc->tcBase(), IMMEDIATE, fault, xc);
                 if (!recognized)
                     fault = std::make_shared<InvalidOpcode>();
             }}, IsNonSpeculative, IsStore);

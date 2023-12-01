@@ -485,7 +485,7 @@ triggerWorkloadEvent(ThreadContext *tc)
     tc->getSystemPtr()->workload->event(tc);
 }
 
-uint64_t
+Fault
 memcpy_elide(ThreadContext *tc, ExecContext *xc,
              Addr dest, Addr src, uint64_t len)
 {
@@ -498,16 +498,13 @@ memcpy_elide(ThreadContext *tc, ExecContext *xc,
     Fault f = xc->writeMem((uint8_t*)src, len, dest, 
         Request::MEM_ELIDE, NULL, 
         std::vector<bool>(len, true));
+    if(f != NoFault)
+        DPRINTF(PseudoInst, "pseudo_inst::memcpy_elide fault: %s\n", f->name());
 
-    if (f != NoFault) {
-        Fault *fault_ptr = (Fault *)malloc(sizeof(Fault));
-        *fault_ptr = f;
-        return (uint64_t)fault_ptr;
-    }
-    return 0;
+    return f;
 }
 
-uint64_t
+Fault
 memcpy_elide_free(ThreadContext *tc, ExecContext *xc, Addr dest, uint64_t len)
 {
     DPRINTF(PseudoInst, "pseudo_inst::memcpy_elide_free(dest = 0x%lx, "
@@ -520,12 +517,7 @@ memcpy_elide_free(ThreadContext *tc, ExecContext *xc, Addr dest, uint64_t len)
         Request::MEM_ELIDE_FREE, NULL, 
         std::vector<bool>(len, true));
 
-    if (f != NoFault) {
-        Fault *fault_ptr = (Fault *)malloc(sizeof(Fault));
-        *fault_ptr = f;
-        return (uint64_t)fault_ptr;
-    }
-    return 0;
+    return f;
 }
 
 //

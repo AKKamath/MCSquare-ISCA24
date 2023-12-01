@@ -96,9 +96,9 @@ void workend(ThreadContext *tc, uint64_t workid, uint64_t threadid);
 void m5Syscall(ThreadContext *tc);
 void togglesync(ThreadContext *tc);
 void triggerWorkloadEvent(ThreadContext *tc);
-uint64_t memcpy_elide(ThreadContext *tc, ExecContext *xc,
+Fault memcpy_elide(ThreadContext *tc, ExecContext *xc,
                       Addr dest, Addr src, uint64_t len);
-uint64_t memcpy_elide_free(ThreadContext *tc, ExecContext *xc,
+Fault memcpy_elide_free(ThreadContext *tc, ExecContext *xc,
                       Addr dest, uint64_t len);
 
 /**
@@ -219,12 +219,6 @@ pseudoInstWork(ThreadContext *tc, uint8_t func,
       case M5OP_WORK_END:
         invokeSimcall<ABI>(tc, workend);
         return true;
-      case M5OP_MC2:
-        result = invokeSimcall<ABI, store_ret>(tc, xc, memcpy_elide);
-        return true;
-      case M5OP_MCFREE:
-        result = invokeSimcall<ABI, store_ret>(tc, xc, memcpy_elide_free);
-        return true;
 
       case M5OP_RESERVED1:
       case M5OP_RESERVED4:
@@ -261,6 +255,26 @@ pseudoInst(ThreadContext *tc, uint8_t func, ExecContext *xc = NULL)
 {
     uint64_t result;
     return pseudoInstWork<ABI, store_ret>(tc, func, result, xc);
+}
+
+template <typename ABI, bool store_ret=false>
+bool
+MemElideInst(ThreadContext *tc, uint8_t func,
+           Fault &fault, ExecContext *xc = NULL)
+{
+    DPRINTF(PseudoInst, "pseudo_inst::pseudoInst(%i)\n", func);
+
+    switch (func) {
+      case M5OP_MC2:
+        fault = invokeSimcall<ABI, store_ret>(tc, xc, memcpy_elide);
+        return true;
+      case M5OP_MCFREE:
+        fault = invokeSimcall<ABI, store_ret>(tc, xc, memcpy_elide_free);
+        return true;
+      default:
+        warn("Unhandled m5 op: %#x\n", func);
+        return false;
+    }
 }
 
 } // namespace pseudo_inst
