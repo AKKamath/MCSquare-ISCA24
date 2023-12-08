@@ -34,8 +34,9 @@ create_img:
 
 NCPUS    ?= 8
 MEM_SIZE ?= 3GB
-MEM_CHAN ?= 8
+MEM_CHAN ?= 2
 PREFETCH ?= --l1d-hwp-type=StridePrefetcher --l2-hwp-type=StridePrefetcher
+CTT_SIZE ?= 16384
 BPQ_SIZE ?= 4
 DEST_WB  ?= 3
 
@@ -55,7 +56,7 @@ single_launch_gem5:
 	mkdir -p ${RESULTS}/${TEST};
 	sudo ../build/X86/gem5.opt --debug-flags=PseudoInst -d ${RESULTS}/${TEST} ./fs.py \
 		--fast-forward=1000000000000000000 --mem-size=${MEM_SIZE} --cpu-type=${GEM5_CPU} \
-		--l1i-hwp-type=StridePrefetcher ${PREFETCH} --command-line=${CMD_LINE} \
+		--l1i-hwp-type=StridePrefetcher ${PREFETCH} --command-line=${CMD_LINE} --ctt-size=${CTT_SIZE}\
 		--cpu-clock="4GHz" --mem-type="DDR4_2400_8x8" --bpq-size=${BPQ_SIZE} \
 		--wb-reads=${DEST_WB} --kernel=${GEM5_KERNEL} --disk-image=${GEM5_IMG} -n ${NCPUS} --caches --l2cache \
 		--mem-channels=${MEM_CHAN} --script=${SCRIPT} > ${RESULTS}/${TEST}/fullout_${GEM5_CPU}.txt 2> ${RESULTS}/${TEST}/err_${GEM5_CPU}.txt;
@@ -64,7 +65,7 @@ single_launch_gem5_debug:
 	mkdir -p ${RESULTS}/${TEST};
 	sudo gdb -x run.sh --args ../build/X86/gem5.opt --debug-flags=PseudoInst,MCSquare -d ${RESULTS}/${TEST} ./fs.py \
 		--fast-forward=1000000000000000000 --mem-size=${MEM_SIZE} --cpu-type=${GEM5_CPU} \
-		--l1i-hwp-type=StridePrefetcher ${PREFETCH} --command-line=${CMD_LINE} \
+		--l1i-hwp-type=StridePrefetcher ${PREFETCH} --command-line=${CMD_LINE} --ctt-size=${CTT_SIZE}\
 		--cpu-clock="4GHz" --mem-type="DDR4_2400_8x8" --bpq-size=${BPQ_SIZE} \
 		--wb-reads=${DEST_WB} --kernel=${GEM5_KERNEL} --disk-image=${GEM5_IMG} -n ${NCPUS} --caches --l2cache \
 		--mem-channels=${MEM_CHAN} --script=${SCRIPT} > ${RESULTS}/${TEST}/fullout_${GEM5_CPU}.txt 2> ${RESULTS}/${TEST}/err_${GEM5_CPU}.txt;
@@ -72,8 +73,12 @@ single_launch_gem5_debug:
 extract_test:
 	python ${SCRIPT} ${RESULTS}/${TEST}/stats.txt > ${RESULTS}/${TEST}_res.txt;
 
-REDIS_TESTS ?= redis-8K redis redis-32K redis-64K 
-REDIS_MC_TESTS ?= redis-mc-8K redis-mc redis-mc-32K redis-mc-64K
+#$(MAKE) single_launch_gem5 TEST=redis/$${test}-1 SCRIPT=./scripts/redis/$${test}-run.sh BPQ_SIZE=1 & \
+	$(MAKE) single_launch_gem5 TEST=redis/$${test}-2 SCRIPT=./scripts/redis/$${test}-run.sh BPQ_SIZE=2 & \
+	$(MAKE) single_launch_gem5 TEST=redis/$${test}-8 SCRIPT=./scripts/redis/$${test}-run.sh BPQ_SIZE=8 &		
+
+REDIS_TESTS ?= redis-8K redis redis-32K
+REDIS_MC_TESTS ?= redis-mc-8K redis-mc redis-mc-32K
 launch_redis:
 	sudo ls; \
 	$(MAKE) compile_gem5; \
@@ -81,26 +86,23 @@ launch_redis:
 		$(MAKE) single_launch_gem5 TEST=redis/$${test} & \
 	done; \
 	for test in ${REDIS_MC_TESTS}; do \
-		$(MAKE) single_launch_gem5 TEST=redis/$${test}-1 SCRIPT=./scripts/redis/$${test}-run.sh BPQ_SIZE=1 & \
-		$(MAKE) single_launch_gem5 TEST=redis/$${test}-2 SCRIPT=./scripts/redis/$${test}-run.sh BPQ_SIZE=2 & \
 		$(MAKE) single_launch_gem5 TEST=redis/$${test}-4 SCRIPT=./scripts/redis/$${test}-run.sh BPQ_SIZE=4 & \
-		$(MAKE) single_launch_gem5 TEST=redis/$${test}-8 SCRIPT=./scripts/redis/$${test}-run.sh BPQ_SIZE=8 & \
 	done; \
 	wait;
 
 	$(MAKE) extract_redis > ${RESULTS}/redis.txt;
 
 extract_redis:
-	python ./scripts/redis/redis-extract.py "${REDIS_TESTS}" "${REDIS_MC_TESTS}" "1 2 4 8"
+	python ./scripts/redis/redis-extract.py "${REDIS_TESTS}" "${REDIS_MC_TESTS}" "4"
 
 MC_PICKLE_IMG ?= ./os/mcsquare-20.04-python.img
-PICKLE_TESTS ?= pickle-1M pickle-128K pickle-16K
-PICKLE_MC_TESTS ?= pickle-mc-1M pickle-mc-128K pickle-mc-16K
+PICKLE_TESTS ?= pickle-var#pickle-128K pickle-16K pickle-1M 
+PICKLE_MC_TESTS ?= pickle-mc-var#pickle-mc-128K pickle-mc-16K pickle-mc-1M 
 launch_pickle:
 	sudo ls; \
 	$(MAKE) compile_gem5; \
 	for i in ${PICKLE_MC_TESTS}; do \
-		$(MAKE) single_launch_gem5 GEM5_IMG=${MC_PICKLE_IMG} TEST=pickle/$$i & \
+		$(MAKE) single_launch_gem5_debug GEM5_IMG=${MC_PICKLE_IMG} TEST=pickle/$$i & \
 	done; \
 	for i in ${PICKLE_TESTS}; do \
 		$(MAKE) single_launch_gem5 TEST=pickle/$$i & \
@@ -111,14 +113,20 @@ launch_pickle:
 extract_pickle:
 	python ./scripts/pickle/pickle-extract.py "${PICKLE_TESTS} ${PICKLE_MC_TESTS}"
 
-PROTOBUF_TESTS ?= protobuf protobuf-mc
+PROTOBUF_TESTS ?= protobuf-mc #protobuf protobuf-zio
 launch_protobuf:
 	sudo ls; \
 	$(MAKE) compile_gem5; \
-	for i in ${PROTOBUF_TESTS}; do \
-		$(MAKE) single_launch_gem5 TEST=protobuf/$$i & \
-	done; \
+	for i in protobuf-mc; do \
+		$(MAKE) single_launch_gem5 TEST=protobuf/$$i-256 SCRIPT=./scripts/protobuf/$$i-run.sh CTT_SIZE=256 & \
+	done;
+#	$(MAKE) single_launch_gem5 TEST=protobuf/protobuf & \
+#	$(MAKE) single_launch_gem5 TEST=protobuf/protobuf-zio & \
 	wait;
+
+#		$(MAKE) single_launch_gem5 TEST=protobuf/$$i-1024 SCRIPT=./scripts/protobuf/$$i-run.sh CTT_SIZE=1024 & \
+#		$(MAKE) single_launch_gem5 TEST=protobuf/$$i-4096 SCRIPT=./scripts/protobuf/$$i-run.sh CTT_SIZE=4096 & \
+		$(MAKE) single_launch_gem5 TEST=protobuf/$$i-16384 SCRIPT=./scripts/protobuf/$$i-run.sh CTT_SIZE=16384 & \
 
 SRC_WRITE_SIZES ?= 1 2 4 8 16
 launch_src_write:
@@ -164,3 +172,34 @@ launch_rand_access_micro:
 
 extract_rand_access:
 	python scripts/micro/access-batch-extract.py results/micro/rand/ "access-0 access-1 access-2 access-memcpy access-zio"
+
+MONGO_TESTS ?= mongo-10K mongo-100K 
+MONGO_ZIO_TESTS ?= mongo-10K-zio mongo-100K-zio
+MONGO_MC_TESTS ?= mongo-10K-mc-all mongo-100K-mc-all
+launch_mongo:
+	sudo ls; \
+	$(MAKE) compile_gem5; \
+	for j in 1 2 3; do \
+		for i in ${MONGO_MC_TESTS}; do \
+			$(MAKE) single_launch_gem5 TEST=mongo/mc/$${i}-256-$${j} SCRIPT=./scripts/mongo/$$i-run.sh CTT_SIZE=256 & \
+			$(MAKE) single_launch_gem5 TEST=mongo/mc/$${i}-1024-$${j} SCRIPT=./scripts/mongo/$$i-run.sh CTT_SIZE=1024 & \
+			$(MAKE) single_launch_gem5 TEST=mongo/mc/$${i}-4096-$${j} SCRIPT=./scripts/mongo/$$i-run.sh CTT_SIZE=4096 & \
+			$(MAKE) single_launch_gem5 TEST=mongo/mc/$${i}-16384-$${j} SCRIPT=./scripts/mongo/$$i-run.sh CTT_SIZE=16384 & \
+		done; \
+		for i in ${MONGO_TESTS}; do \
+			$(MAKE) single_launch_gem5 TEST=mongo/norm/$${i}-$${j} SCRIPT=./scripts/mongo/$$i-run.sh & \
+		done; \
+		for i in ${MONGO_ZIO_TESTS}; do \
+			$(MAKE) single_launch_gem5 TEST=mongo/zio/$${i}-$${j} SCRIPT=./scripts/mongo/$$i-run.sh & \
+		done; \
+		wait; \
+	done; \
+	wait;
+
+CTT_OVERFLOW_SIZES=64 256 1024 4096 16384
+launch_ctt_overflow:
+	$(MAKE) compile_gem5;
+	for i in ${CTT_OVERFLOW_SIZES}; do \
+		$(MAKE) single_launch_gem5_debug TEST=micro/overflow/ctt-overflow-$${i} SCRIPT=./scripts/micro/ctt-overflow-run.sh CTT_SIZE=$${i} & \
+	done; \
+	wait;
