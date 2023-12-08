@@ -437,6 +437,57 @@ MemCtrl::checkBounceTable() {
         }
         ++i;
     }
+    // See if bounce for src is complete
+    if(mcsquare->ctt_src_entry) {
+        MCSquare::Types type = mcsquare->contains(mcsquare->ctt_src_entry, 64);
+        if(mcsquare->ctt_count == 0 || type != MCSquare::Types::TYPE_SRC) {
+            DPRINTF(MCSquare, "Reset ctt_src_entry %lx. CTT size now %d\n", 
+                    mcsquare->ctt_src_entry, mcsquare->getCTTSize());
+            mcsquare->ctt_src_entry = 0;
+            mcsquare->ctt_count = 0;
+            //clearCTT();
+        }
+    }
+}
+
+void MemCtrl::clearCTT() {
+    // Start freeing CTT entries if needed
+    if(mcsquare->getCTTSize() >= mcsquare->ctt_free_frac * mcsquare->getMaxCTTSize() &&
+        mcsquare->ctt_count == 0 && mcsquare->ctt_src_entry == 0) {
+        mcsquare->ctt_src_entry = mcsquare->getAddrToFree(getAddrRanges());
+        if(mcsquare->ctt_src_entry) {
+            DPRINTF(MCSquare, "%d exceeds threshold of CTT size %d! Freeing entries; Candidate %lx\n", 
+                    mcsquare->getCTTSize(), (int)(mcsquare->ctt_free_frac * 
+                    mcsquare->getMaxCTTSize()), mcsquare->ctt_src_entry);
+
+            unsigned size = 64;
+            uint32_t burst_size = dram->bytesPerBurst();
+            unsigned offset = mcsquare->ctt_src_entry & (burst_size - 1);
+            unsigned int pkt_count = divCeil(offset + size, burst_size);
+
+            if (readQueueFull(pkt_count)) {
+                DPRINTF(MCSquare, "Trying to clear CTT but read queue full\n");
+                return;
+            }
+
+            // Create read to src request
+            auto req = std::make_shared<Request>(mcsquare->ctt_src_entry, 64, 
+                Request::MEM_ELIDE_WRITE_SRC, Request::funcRequestorId);
+            auto bouncePkt = Packet::createRead(req);
+            bouncePkt->allocate();
+
+            mcsquare->ctt_count = -1;
+
+            if (!addToReadQueue(bouncePkt, pkt_count, dram)) {
+                // If we are not already scheduled to get a request out of the
+                // queue, do so now
+                if (!nextReqEvent.scheduled()) {
+                    DPRINTF(MemCtrl, "Request scheduled immediately\n");
+                    schedule(nextReqEvent, curTick());
+                }
+            }
+        }
+    }
 }
 
 bool
@@ -460,6 +511,19 @@ MemCtrl::canHandleMCPkt(PacketPtr pkt, bool &canHandle)
                 stats.numWrRetry++;
                 srcWritePause = true;
             }
+            return false;
+        }
+        // Check if CTT is already full
+        if(mcsquare->getCTTSize() >= mcsquare->getMaxCTTSize()) {
+            DPRINTF(MCSquare, "%ld exceeds max CTT size %d! Cannot add %lx\n", 
+                mcsquare->getCTTSize(), mcsquare->getMaxCTTSize(), pkt->getAddr());
+            canHandle = false;
+            if(weContain) {
+                retryWrReq = true;
+                stats.numWrRetry++;
+                srcWritePause = true;
+            }
+            mcsquare->stats.memElideBlockedCTTFull++;
             return false;
         }
         // Check if mem_elide touches current src write.
@@ -531,6 +595,7 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
             // is still having a pointer to it
             pendingDelete.reset(pkt);
         }
+        clearCTT();
         return true;
     }
 
@@ -698,8 +763,14 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
                         break;
                     }
                 mcsquare->m_bpq.decPkts(pkt->req->_paddr_src);
+                if(mcsquare->ctt_src_entry && mcsquare->ctt_count > 0 && 
+                   pkt->req->_paddr_src == mcsquare->ctt_src_entry) {
+                    mcsquare->ctt_count--;
+                    DPRINTF(MCSquare, "Decrementing ctt_count to %d\n", mcsquare->ctt_count);
+                }
                 mcsquare->splitEntry(pkt);
                 checkBounceTable();
+                clearCTT();
                 // Response from other memory controller
                 // Just using this to update our table, so return here.
                 if(!weContain)
@@ -707,7 +778,7 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
                 else
                     pkt->req->setFlags(Request::MEM_ELIDE_WRITE_DEST);
                 DPRINTF(MCSquare, "Found a write to dest %lx!\n", pkt->getAddr());
-                mcsquare->stats.destWriteSize += pkt->getSize();
+                mcsquare->stats.destWriteSizeCPU += pkt->getSize();
                 // Will not create a response. Create a dummy duplicate packet for coherency of CTT
                 if(!pkt->needsResponse()) {
                     DPRINTF(MCSquare, "Does not need response, create fake packet %lx!\n", pkt->getAddr());
@@ -734,6 +805,7 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
                     return true;
 
                 if(pkt->req->getFlags() & Request::MEM_ELIDE_WRITE_SRC) {
+                    mcsquare->stats.srcWritesBlocked++;
                     DPRINTF(MCSquare, "Found write to src %lx, waiting for bounce to complete\n", 
                             pkt->getAddr());
                     retryWrReq = true;
@@ -754,6 +826,7 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
 
                 // Exceeded BPQ size
                 if(mcsquare->m_bpq.size() >= mcsquare->getMaxBPQSize()) {
+                    mcsquare->stats.srcWritesBlocked++;
                     DPRINTF(MCSquare, "Exceeded max BPQ size! Cannot add %lx\n", pkt->getAddr());
                     retryWrReq = true;
                     stats.numWrRetry++;
@@ -769,6 +842,7 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
                 unsigned offset = pkt->getAddr() & (burst_size - 1);
                 unsigned int pkt_count = divCeil(offset + size, burst_size);
                 if (readQueueFull(pkt_count)) {
+                    mcsquare->stats.srcWritesBlocked++;
                     DPRINTF(MCSquare, "Found write to src %lx, read queue full\n", 
                             pkt->getAddr());
                     retryWrReq = true;
@@ -800,8 +874,7 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
                 stats.readReqs++;
                 stats.bytesReadSys += size;
                 // Now return until the final write to dest(s) is complete
-                mcsquare->stats.srcWriteSize += pkt->getSize();
-                mcsquare->stats.srcWritesBlocked++;
+                mcsquare->stats.srcWriteSizeCPU += pkt->getSize();
                 accessAndRespond(pkt, frontendLatency + mcsquare->getBPQPenalty(), dram);
                 return true;
             }
@@ -810,7 +883,7 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
                 DPRINTF(MCSquare, "Found a read to dest %lx, applying elision penalty\n", pkt->getAddr());
                 pkt->req->_paddr_dest = pkt->getAddr();
                 mcsquare->bounceAddr(pkt);
-                mcsquare->stats.destReadSize += pkt->getSize();
+                mcsquare->stats.destReadSizeCPU += pkt->getSize();
                 pkt->req->setFlags(Request::MEM_ELIDE_REDIRECT_SRC);
                 // Push pkt to redirected source
                 if(pkt->req->_paddr_dest != pkt->getAddr()) {
@@ -822,7 +895,7 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
                     return true;
                 }
             } else if(mcsquare->isSrc(pkt)) {
-                mcsquare->stats.srcReadSize += pkt->getSize();
+                mcsquare->stats.srcReadSizeCPU += pkt->getSize();
                 //DPRINTF(MCSquare, "Found read to src %lx; fallthrough\n", pkt->getAddr());
             }
         }
@@ -838,6 +911,11 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
             }
         if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
             mcsquare->m_bpq.decPkts(pkt->req->_paddr_src);
+            if(mcsquare->ctt_src_entry && mcsquare->ctt_count > 0 && 
+               pkt->req->_paddr_src == mcsquare->ctt_src_entry) {
+                mcsquare->ctt_count--;
+                DPRINTF(MCSquare, "Decrementing ctt_count to %d\n", mcsquare->ctt_count);
+            }
             checkBounceTable();
             // Sent as a write to dest. Just acknowledge and ignore.
             if(!mcsquare->isDest(pkt)) {
@@ -849,6 +927,7 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
                 return true;
             }
             mcsquare->splitEntry(pkt);
+            clearCTT();
             if(!weContain)
                 return true;
         }
@@ -893,9 +972,11 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
                                   " in WPQ\n", pkt->getAddr());
                 return false;
             }
+            mcsquare->stats.destWriteSizeBounce += pkt->getSize();
             // We have space. Let this proceed!
             mcsquare->splitEntry(pkt);
             checkBounceTable();
+            clearCTT();
             if(!weContain)
                 return true;
         }
@@ -1158,10 +1239,22 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
                                 (*i)->getAddr());
                 }
                 mcsquare->m_bpq.setPkts(pkt->getAddr(), pktList.size());
+                if(pkt->getAddr() == mcsquare->ctt_src_entry) {
+                    mcsquare->ctt_count = pktList.size();
+                    DPRINTF(MCSquare, "Setting ctt_count to %d for %lx\n", 
+                        mcsquare->ctt_count, mcsquare->ctt_src_entry);
+                }
             } else {
                 // Corner case: read to src, but removed from table in between
                 mcsquare->m_bpq.setPkts(pkt->getAddr(), 0);
+                if(pkt->getAddr() == mcsquare->ctt_src_entry) {
+                    mcsquare->ctt_count = 0;
+                    mcsquare->ctt_src_entry = 0;
+                    DPRINTF(MCSquare, "Setting ctt_count to %d for %lx\n", 
+                        mcsquare->ctt_count, mcsquare->ctt_src_entry);
+                }
                 checkBounceTable();
+                clearCTT();
             }
             pkt->deleteData();
             // The src read does not need response as it was generated by

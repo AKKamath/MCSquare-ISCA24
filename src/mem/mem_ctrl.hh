@@ -797,6 +797,7 @@ class MemCtrl : public qos::MemCtrl
     virtual bool recvTimingReq(PacketPtr pkt);
 
     void checkBounceTable();
+    void clearCTT();
 
     bool recvFunctionalLogic(PacketPtr pkt, MemInterface* mem_intr);
     Tick recvAtomicLogic(PacketPtr pkt, MemInterface* mem_intr);

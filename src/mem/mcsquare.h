@@ -139,6 +139,10 @@ class MCSquare : public SimObject {
     // Whether read to dest should create a duplicate write packet
     const int wb_dest_reads;
   public:
+    const double ctt_free_frac;
+    Addr ctt_src_entry;
+    int ctt_count;
+
     int wbDestReads() {
       return wb_dest_reads;
     }
@@ -152,20 +156,26 @@ class MCSquare : public SimObject {
     MCSquare(const MCSquareParams &params) : SimObject(params),
       ctt_max_sz(params.ctt_size), ctt_acc_lat(params.ctt_penalty), 
       bpq_max_sz(params.bpq_size), bpq_acc_lat(params.bpq_penalty), 
-      wb_dest_reads(params.wb_dest_reads), stats(*this) {
-        printf("Created MCSquare with: CTT (%d size, %lu ticks); ", ctt_max_sz, ctt_acc_lat);
-        printf("BPQ(%d size, %lu ticks)\n", bpq_max_sz, bpq_acc_lat);
+      wb_dest_reads(params.wb_dest_reads), ctt_free_frac(params.ctt_free),
+      stats(*this) {
+        printf("Created MCSquare with: CTT (%d size, %lu ticks, %f%% free frac), ",
+          ctt_max_sz, ctt_acc_lat, ctt_free_frac * 100);
+        printf("BPQ (%d size, %lu ticks)\n", bpq_max_sz, bpq_acc_lat);
+        ctt_src_entry = 0;
+        ctt_count = 0;
       }
 
     // CTT management functions
     void insertEntry(Addr dest, Addr src, uint64_t size);
     void deleteEntry(Addr dest, uint64_t size);
     void splitEntry(PacketPtr pkt);
+    Addr getAddrToFree(AddrRangeList addrList);
     // Check CTT
     Types contains(Addr addr, size_t size);
     Types contains(PacketPtr pkt);
     bool isSrc(PacketPtr pkt);
     bool isDest(PacketPtr pkt);
+    size_t getCTTSize() { return m_ctt.size(); }
 
     // Bouncing related functions
     bool bounceAddr(PacketPtr pkt);
@@ -190,14 +200,17 @@ class MCSquare : public SimObject {
         // All statistics that the model needs to capture
         statistics::Scalar maxEntries;
         statistics::Scalar sizeElided;
-        statistics::Scalar destReadSize;
-        statistics::Scalar destWriteSize;
-        statistics::Scalar srcReadSize;
-        statistics::Scalar srcWriteSize;
+        statistics::Scalar destReadSizeCPU;
+        statistics::Scalar destWriteSizeCPU;
+        statistics::Scalar srcReadSizeCPU;
+        statistics::Scalar srcWriteSizeCPU;
+        statistics::Scalar destReadSizeBounce;
+        statistics::Scalar destWriteSizeBounce;
+        statistics::Scalar srcReadSizeBounce;
+        statistics::Scalar srcWriteSizeBounce;
         statistics::Scalar srcWritesBlocked;
-    };
-
-    CtrlStats stats;
+        statistics::Scalar memElideBlockedCTTFull;
+    } stats;
 };
 
 } // namespace memory

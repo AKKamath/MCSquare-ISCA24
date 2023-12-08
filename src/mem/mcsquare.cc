@@ -159,17 +159,17 @@ MCSquare::insertEntry(Addr dest, Addr src, uint64_t size)
     // 3) See if we can merge entries
     for(auto i = m_ctt.begin(); i != m_ctt.end(); ++i) {
         if(i->src + i->size == src && i->dest + i->size == dest) {
+            i->size += size;
             DPRINTF(MCSquare, "Merged: dest - %lx, src - %lx, size - %lu\n", 
                     dest, src, size);
-            i->size += size;
             return;
         }
         if(src + size == i->src && dest + size == i->dest) {
-            DPRINTF(MCSquare, "Merged: dest - %lx, src - %lx, size - %lu\n", 
-                   dest, src, size);
             i->dest = dest;
             i->src  = src;
             i->size += size;
+            DPRINTF(MCSquare, "Merged: dest - %lx, src - %lx, size - %lu\n", 
+                   dest, src, size);
             return;
         }
     }
@@ -250,8 +250,28 @@ MCSquare::splitEntry(PacketPtr pkt)
 {
     assert(pkt->getSize() == 64);
     assert((pkt->getAddr() & 63) == 0);
-    // Delete entry will automatically sqplit
+    // Delete entry will automatically split
     deleteEntry(pkt->getAddr(), pkt->getSize());
+}
+
+Addr 
+MCSquare::getAddrToFree(AddrRangeList addrList) 
+{
+    Addr minAddr = 0;
+    uint64_t minSize = 0;
+    for(auto i = m_ctt.begin(); i != m_ctt.end(); ++i) {
+        for(auto j = addrList.begin(); j != addrList.end(); ++j)
+            if(j->contains(i->src & ~((uint64_t)63))) {
+                if(i->size < minSize || minSize == 0) {
+                    minAddr = i->src & ~((uint64_t)63);
+                    minSize = i->size;
+                    if(minSize <= 64)
+                        return minAddr;
+                }
+                break;
+            }
+    }
+    return minAddr;
 }
 
 MCSquare::Types
@@ -259,8 +279,8 @@ MCSquare::contains(Addr addr, size_t size)
 {
     for(auto i = m_ctt.begin(); i != m_ctt.end(); ++i) {
         if(RangeSize(addr, size).intersects(RangeSize(i->src, i->size))) {
-            DPRINTF(MCSquare, "BPQ entry %lx intersects (d%lx, s%lx, %lu)\n", 
-                    addr, i->dest, i->src, i->size);
+            //DPRINTF(MCSquare, "BPQ entry %lx intersects (d%lx, s%lx, %lu)\n", 
+            //        addr, i->dest, i->src, i->size);
             return Types::TYPE_SRC;
         }
     }
@@ -588,16 +608,27 @@ MCSquare::CtrlStats::CtrlStats(MCSquare &_ctrl)
              "Maximum size of elision table during simulation"),
     ADD_STAT(sizeElided, statistics::units::Count::get(),
              "Total size (in bytes) of data elided"),
-    ADD_STAT(destReadSize, statistics::units::Count::get(),
-             "Amount (in bytes) of destination data read"),
-    ADD_STAT(destWriteSize, statistics::units::Count::get(),
-             "Amount (in bytes) of destination data written"),
-    ADD_STAT(srcReadSize, statistics::units::Count::get(),
-             "Amount (in bytes) of src data read"),
-    ADD_STAT(srcWriteSize, statistics::units::Count::get(),
-             "Amount (in bytes) of src data written"),
+    ADD_STAT(destReadSizeCPU, statistics::units::Count::get(),
+             "Amount (in bytes) of destination data read by CPU"),
+    ADD_STAT(destWriteSizeCPU, statistics::units::Count::get(),
+             "Amount (in bytes) of destination data written by CPU"),
+    ADD_STAT(srcReadSizeCPU, statistics::units::Count::get(),
+             "Amount (in bytes) of src data read by CPU"),
+    ADD_STAT(srcWriteSizeCPU, statistics::units::Count::get(),
+             "Amount (in bytes) of src data written by CPU"),
+    ADD_STAT(destReadSizeBounce, statistics::units::Count::get(),
+             "Amount (in bytes) of destination data read by bounce"),
+    ADD_STAT(destWriteSizeBounce, statistics::units::Count::get(),
+             "Amount (in bytes) of destination data written by bounce"),
+    ADD_STAT(srcReadSizeBounce, statistics::units::Count::get(),
+             "Amount (in bytes) of src data read by bounce"),
+    ADD_STAT(srcWriteSizeBounce, statistics::units::Count::get(),
+             "Amount (in bytes) of src data written by bounce"),
     ADD_STAT(srcWritesBlocked, statistics::units::Count::get(),
-             "Number of writes to src blocked")
+             "Number of writes to src blocked"),
+    ADD_STAT(memElideBlockedCTTFull, statistics::units::Count::get(),
+             "Number of mem elides blocked due to CTT being full")
+             
 {
 }
 
