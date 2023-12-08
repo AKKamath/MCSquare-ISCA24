@@ -381,7 +381,7 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
             }
 
             // remember where to route the normal response to
-            if ((expect_response || expect_snoop_resp) && !isMCSquare(pkt)) {
+            if ((expect_response || expect_snoop_resp)/* && !isMCSquare(pkt)*/) {
                 assert(routeTo.find(pkt->req) == routeTo.end());
                 routeTo[pkt->req] = cpu_side_port_id;
 
@@ -492,10 +492,10 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     RequestPort *src_port = memSidePorts[mem_side_port_id];
 
     // CPU already got ACK for packet from cache. Delete here.
-    if(isMCSquare(pkt)) {
+    /*if(isMCSquare(pkt)) {
         delete pkt;
         return true;
-    }
+    }*/
 
     if(pkt->req->getFlags() & Request::MEM_ELIDE_DEST_WB && pkt->isWrite()) {
         pkt->cmd = pkt->makeWriteCmd(pkt->req);

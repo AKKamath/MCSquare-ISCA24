@@ -339,7 +339,7 @@ Cache::handleTimingReqMiss(PacketPtr pkt, CacheBlk *blk, Tick forward_time,
 
         // HACK: Send dummy response to CPUs
         // Ideally, the CPU should issue these as non-blocking instead
-        if(isMCSquare(pkt) && pkt->requestorId() != Request::funcRequestorId) {
+        /*if(isMCSquare(pkt) && pkt->requestorId() != Request::funcRequestorId) {
             DPRINTF(MCSquare, "Making copy of MC packet in cache %lx %lx %lu\n", 
                 pkt->req->_paddr_dest, pkt->req->_paddr_src, pkt->req->getSize());
             PacketPtr pf = nullptr;
@@ -358,7 +358,7 @@ Cache::handleTimingReqMiss(PacketPtr pkt, CacheBlk *blk, Tick forward_time,
             pkt->makeTimingResponse();
             cpuSidePort.schedTimingResp(pkt, request_time);
             pkt = pf;
-        }
+        }*/
 
         if (pkt->isWrite()) {
             allocateWriteBuffer(pkt, forward_time);
