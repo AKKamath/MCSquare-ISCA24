@@ -19,6 +19,8 @@
 #define ACCESSES (SIZE / sizeof(uint64_t))
 
 #define cust_min(a, b) (((a) < (b)) ? (a) : (b))
+#define MCLAZY(dest, src, size) \
+        asm volatile(".byte 0x0F, 0x0A" : : "D"(dest), "S"(src), "d"(size));
 
 #ifdef CHRONO
 #include <chrono>
@@ -92,7 +94,7 @@ static void memcpy_elide_clwb(void* dest, const void* src, uint64_t len)
         else {
           // Make elide size a multiple of 64
           elide_size &= (~63);
-          m5_memcpy_elide(dest, (void*)temp_src, elide_size);
+          MCLAZY(dest, (void*)temp_src, elide_size);
           #ifdef TIME_MEMCPY
           time_elide += rdtsc() - start;
           #endif

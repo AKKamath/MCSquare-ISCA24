@@ -23,6 +23,8 @@ echo "
 #define ACCESSES (SIZE / sizeof(uint64_t))
 
 #define cust_min(a, b) (((a) < (b)) ? (a) : (b))
+#define MCLAZY(dest, src, size) \
+        asm volatile(\".byte 0x0F, 0x0A\" : : \"D\"(dest), \"S\"(src), \"d\"(size));
 
 #include <chrono>
 using namespace std::chrono;
@@ -95,7 +97,7 @@ void memcpy_elide_pgflush(void* dest, void* src, uint64_t len)
         uint64_t dest_off = PAGE_SIZE - ((uint64_t)dest & (PAGE_SIZE - 1));
         // Pick minimum size left as elide_size
         uint64_t elide_size = cust_min(cust_min(src_off, dest_off), len);
-        m5_memcpy_elide(dest, src, elide_size);
+        MCLAZY(dest, src, elide_size);
         dest = (void *)((char *)dest + elide_size);
         src = (void *)((char *)src + elide_size);
         len -= elide_size;
@@ -140,7 +142,7 @@ void memcpy_elide_clwb(void* dest, void* src, uint64_t len)
         else {
           // Make elide size a multiple of 64
           elide_size &= (~63);
-          m5_memcpy_elide(dest, (void*)temp_src, elide_size);
+          MCLAZY(dest, (void*)temp_src, elide_size);
         }
         dest = (void *)((char *)dest + elide_size);
         temp_src = (temp_src + elide_size);
