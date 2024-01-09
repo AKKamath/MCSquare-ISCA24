@@ -50,6 +50,7 @@
 #include "debug/AddrRanges.hh"
 #include "debug/Drain.hh"
 #include "debug/XBar.hh"
+#include "mem/mcsquare.h"
 
 namespace gem5
 {
@@ -131,6 +132,10 @@ BaseXBar::calcPacketTiming(PacketPtr pkt, Tick header_delay)
         pkt->payloadDelay = std::max<Tick>(pkt->payloadDelay,
                                            divCeil(pkt->getSize(), width) *
                                            clockPeriod());
+        // MCSquare packets have at most 8 bytes of payload for src address
+        if(isMCSquare(pkt)) {
+            pkt->payloadDelay = divCeil(8, width) * clockPeriod();\
+        }
     }
 
     // the payload delay is not paying for the clock offset as that is
