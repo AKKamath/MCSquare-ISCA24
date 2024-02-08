@@ -21,7 +21,8 @@ bool isMCSquare(const gem5::Packet* pkt)
 
 bool isMCReq(const gem5::Packet* pkt)
 {
-    bool sourceBounce =  pkt->req->getFlags() & (Request::MEM_ELIDE_WRITE_SRC | Request::MEM_ELIDE_REDIRECT_SRC);
+    bool sourceBounce =  pkt->req->getFlags() & 
+        (Request::MEM_ELIDE_WRITE_SRC | Request::MEM_ELIDE_REDIRECT_SRC);
     bool destWB =  pkt->req->getFlags() & (Request::MEM_ELIDE_DEST_WB);
     return sourceBounce || destWB;
 }
@@ -248,8 +249,8 @@ MCSquare::deleteEntry(Addr dest, uint64_t size)
 void
 MCSquare::splitEntry(PacketPtr pkt)
 {
-    assert(pkt->getSize() == 64);
-    assert((pkt->getAddr() & 63) == 0);
+    assert(pkt->getSize() == 64 || pkt->req->getFlags() & Request::UNCACHEABLE);
+    assert((pkt->getAddr() & 63) == 0 || pkt->req->getFlags() & Request::UNCACHEABLE);
     // Delete entry will automatically split
     deleteEntry(pkt->getAddr(), pkt->getSize());
 }
@@ -347,17 +348,17 @@ bool
 MCSquare::bounceAddr(PacketPtr pkt)
 {
     // First move dest_offset to appropriate position
-    if(pkt->mc_dest_offset == -1)
+    if(pkt->mc_dest_offset == -1 || pkt->mc_dest_offset == (uint64_t)18446744073709551615)
         pkt->mc_dest_offset = 0;
     else
         pkt->mc_dest_offset += pkt->mc_size;
     
     // Done all bouncing. Return to original form.
-    if(pkt->mc_dest_offset == 64) {
+    if(pkt->mc_dest_offset == pkt->getSize()) {
         pkt->setAddr(pkt->req->_paddr_dest);
         return true;
     } else if(pkt->mc_right_offset != -1 && 
-              pkt->mc_dest_offset + pkt->mc_right_offset == 64) {
+              pkt->mc_dest_offset + pkt->mc_right_offset == pkt->getSize()) {
         pkt->setAddr(pkt->req->_paddr_dest);
         return true;
     }
@@ -365,12 +366,15 @@ MCSquare::bounceAddr(PacketPtr pkt)
     // Shouldn't reach here
     if(pkt->mc_dest_offset > 64) {
         fprintf(stderr, "%lu: Cannot find bounce entry for packet: dest=%lx, "
-            "dest offset = %lu\n", ::gem5::curTick(), pkt->req->_paddr_dest, pkt->mc_dest_offset);
+            "dest offset = %lu, mc_size = %lu\n", ::gem5::curTick(), 
+            pkt->req->_paddr_dest, pkt->mc_dest_offset, pkt->mc_size);
         fflush(stdout);
         assert(false);
     }
 
+    uint64_t min_intersect = (uint64_t)18446744073709551615;
     for(auto i = m_ctt.begin(); i != m_ctt.end(); ++i) {
+        // Check if the next address is contained in the entry
         if(RangeSize(i->dest, i->size).contains(pkt->req->_paddr_dest + pkt->mc_dest_offset)) {
             uint64_t offset = pkt->req->_paddr_dest + pkt->mc_dest_offset - i->dest;
             // Convert to src address to bounce
@@ -380,13 +384,39 @@ MCSquare::bounceAddr(PacketPtr pkt)
                 std::min(i->size - offset, 64 - pkt->mc_src_offset));
             
             DPRINTF(MCSquare, "Bounce dest %lx offset = %lu, size = %lu, addr = %lx\n", 
-                pkt->req->_paddr_dest, pkt->mc_dest_offset, pkt->mc_size, pkt->getAddr());          
+                pkt->req->_paddr_dest, pkt->mc_dest_offset, pkt->mc_size, pkt->getAddr());
             return false;
         }
+        // Check if the entire read request intersects with the entry
+        // May require a partial dest read first, before we bounce src
+        if(RangeSize(i->dest, i->size).intersects(
+           RangeSize(pkt->req->_paddr_dest + pkt->mc_dest_offset, 
+           pkt->getSize() - pkt->mc_dest_offset))) {
+            if(pkt->req->_paddr_dest + pkt->mc_dest_offset >= i->dest) {
+                fprintf(stderr, "%lu: Packet: dest=%lx, size=%lu; "
+                    "Entry dest=%lx,entry size=%lu\n dest offset = %lu\n", 
+                    ::gem5::curTick(), pkt->req->_paddr_dest, pkt->getSize(), 
+                    i->dest, i->size, pkt->mc_dest_offset);
+            }
+            assert(pkt->req->_paddr_dest + pkt->mc_dest_offset < i->dest);
+            min_intersect = std::min(min_intersect, 
+                (uint64_t)i->dest - (pkt->req->_paddr_dest + pkt->mc_dest_offset));
+        }
     }
+
+    // Require partial dest read first, before src bounce
+    if(min_intersect != (uint64_t)18446744073709551615) {
+        pkt->setAddr(pkt->req->_paddr_dest);
+        pkt->mc_src_offset = pkt->mc_dest_offset;
+        pkt->mc_size = std::min(min_intersect, 64 - pkt->mc_src_offset);
+        return false;
+    }
+
     // Bounced dest read for already written dest
     if(pkt->req->getFlags() & Request::MEM_ELIDE_WRITE_SRC) {
         pkt->setAddr(pkt->req->_paddr_dest);
+        pkt->mc_dest_offset = 0;
+        pkt->mc_size = 0;
         return true;
     }
     

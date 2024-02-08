@@ -208,7 +208,8 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
 
     const bool snoop_caches = !system->bypassCaches() &&
         pkt->cmd != MemCmd::WriteClean &&
-        !isMCSquare(pkt);
+        !isMCSquare(pkt) && 
+        !(pkt->req->isUncacheable() && pkt->getSize() < 64);
     if (snoop_caches) {
         assert(pkt->snoopDelay == 0);
 
@@ -381,7 +382,7 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
             }
 
             // remember where to route the normal response to
-            if ((expect_response || expect_snoop_resp)/* && !isMCSquare(pkt)*/) {
+            if ((expect_response || expect_snoop_resp)) {
                 assert(routeTo.find(pkt->req) == routeTo.end());
                 routeTo[pkt->req] = cpu_side_port_id;
 
@@ -491,12 +492,6 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     // determine the source port based on the id
     RequestPort *src_port = memSidePorts[mem_side_port_id];
 
-    // CPU already got ACK for packet from cache. Delete here.
-    /*if(isMCSquare(pkt)) {
-        delete pkt;
-        return true;
-    }*/
-
     if(pkt->req->getFlags() & Request::MEM_ELIDE_DEST_WB && pkt->isWrite()) {
         pkt->cmd = pkt->makeWriteCmd(pkt->req);
         PortID new_mem_side_port_id = findPort(pkt->getAddrRange());
@@ -521,7 +516,7 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
         return true;
     }
 
-    if(pkt->req->getFlags() & Request::MEM_ELIDE_WRITE_DEST && pkt->isWrite()) {
+    /*if(pkt->req->getFlags() & Request::MEM_ELIDE_WRITE_DEST && pkt->isWrite()) {
         // Write response which modified elision table. Forward to all memctrls.
         pkt->cmd = pkt->makeWriteCmd(pkt->req);
         for(auto i = portMap.begin(); i != portMap.end(); ++i) {
@@ -531,7 +526,7 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
         }
         // Forwarding done. Proceed as normal
         pkt->makeResponse();
-    }
+    }*/
 
     if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
         if(pkt->isRead())
