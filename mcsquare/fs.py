@@ -101,6 +101,20 @@ def addMCOptions(parser):
         help="Whether to writeback generated dest reads. (0 = no, 1 = always, " +
              "2 = if WPQ is less than half full)",
     )
+    parser.add_argument(
+        "--ctt-frac",
+        default=0.75,
+        type=float,
+        action="store",
+        help="How full the CTT should be before we start freeing entries.",
+    )
+    parser.add_argument(
+        "--ctt-lat",
+        default="979ps",
+        type=str,
+        action="store",
+        help="How much latency a CTT access adds.",
+    )
 
 def build_test_system(np):
     cmdline = cmd_line_template()
@@ -366,6 +380,8 @@ for i in range(len(test_sys.mem_ctrls)):
     test_sys.mem_ctrls[i].mcsquare.ctt_size = args.ctt_size
     test_sys.mem_ctrls[i].mcsquare.bpq_size = args.bpq_size
     test_sys.mem_ctrls[i].mcsquare.wb_dest_reads = args.wb_reads
+    test_sys.mem_ctrls[i].mcsquare.ctt_free = args.ctt_frac
+    test_sys.mem_ctrls[i].mcsquare.ctt_penalty = args.ctt_lat
 
 if len(bm) == 2:
     drive_sys = build_drive_system(np)
