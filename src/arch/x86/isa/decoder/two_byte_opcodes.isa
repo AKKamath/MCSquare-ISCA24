@@ -194,8 +194,8 @@
                 DPRINTF(PseudoInst, "memcpy_elide(dest = 0x%lx, src = 0x%lx, "
                     "len = %ld)\n", Rdi, Rsi, Rdx);
                 Fault f = xc->writeMem((uint8_t*)Rsi, Rdx, Rdi, 
-                    Request::MEM_ELIDE | Request::NO_TSO, NULL, 
-                    std::vector<bool>(Rdx, true));
+                    Request::MEM_ELIDE | Request::NO_TSO | Request::UNCACHEABLE,
+                    NULL, std::vector<bool>(Rdx, true));
                 if(f != NoFault)
                     DPRINTF(PseudoInst, "pseudo_inst::memcpy_elide fault: %s\n", f->name());
                 return f;

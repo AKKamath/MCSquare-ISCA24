@@ -514,7 +514,7 @@ memcpy_elide_free(ThreadContext *tc, ExecContext *xc, Addr dest, uint64_t len)
               "'timing' mode.\n");
     }
     Fault f = xc->writeMem(NULL, len, dest, 
-        Request::MEM_ELIDE_FREE, NULL, 
+        Request::MEM_ELIDE_FREE | Request::UNCACHEABLE, NULL, 
         std::vector<bool>(len, true));
 
     return f;
