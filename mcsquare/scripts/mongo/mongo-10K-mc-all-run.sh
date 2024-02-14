@@ -6,7 +6,7 @@ scons build/x86/out
 cd /home/akkamath/gem5-zIO/mcsquare
 
 pushd lib
-make PSIZE=16384
+make PSIZE=8191
 popd
 
 MC_BIN=/home/akkamath/gem5-zIO/mcsquare/lib/mongo_mc_interpose_all.so

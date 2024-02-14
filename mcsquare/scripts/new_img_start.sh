@@ -17,6 +17,9 @@ apt install build-essential make pkg-config autoconf libnuma-dev libaio1 \
 # Needed for gem5 setup
 apt install wget openjdk-17-jdk openjdk-17-jre
 
+# Needed for cicada setup
+apt install cmake
+
 # Setup m5 commands
 wget http://cs.wisc.edu/~powerjg/files/gem5-guest-tools-x86.tgz
 tar xzvf gem5-guest-tools-x86.tgz
@@ -26,4 +29,13 @@ popd
 
 mkdir home/akkamath
 pushd home/akkamath
+
 git clone https://github.com/AKKamath/gem5-zIO.git
+pushd gem5-zIO
+git checkout native_inst
+popd
+
+git clone https://github.com/AKKamath/cicada-engine.git
+pushd cicada-engine
+git checkout scale_down
+popd

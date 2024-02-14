@@ -44,10 +44,13 @@ def extract_ticks(file_path):
 
     return experiment_ticks
 
-sizes=[64, 256, 1024, 4096, 16384, 65536, 262144, 1048576]
+sizes=[64, 256, "1KB", "4KB", "16KB", "64KB", "256KB", "1MB"]
 expts=["pgflush_mcsquare", "clwb_mcsquare", "memcpy", "zIO"]
 def main():
     file_path = sys.argv[1]
+    if len(sys.argv) > 2:
+        global expts
+        expts = sys.argv[2].split()
 
     experiment_cycles = extract_cycles(file_path)
     print("Max CPU cycles")

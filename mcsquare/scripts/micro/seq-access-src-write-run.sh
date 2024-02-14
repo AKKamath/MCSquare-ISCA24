@@ -16,7 +16,7 @@ echo "
 #include <sys/syscall.h>         /* Definition of SYS_* constants */
 #include <sys/socket.h>
 #include <string.h>
-#define SIZE (1024*1024)
+#define SIZE (4096*1024)
 #define PAGE_SIZE 4096
 #define PAGE_BITS 12
 #define CL_SIZE 64
@@ -24,6 +24,8 @@ echo "
 #define ACCESSES (SIZE / sizeof(uint64_t))
 
 #define cust_min(a, b) (((a) < (b)) ? (a) : (b))
+#define MCLAZY(dest, src, size) \
+        asm volatile(\".byte 0x0F, 0x0A\" : : \"D\"(dest), \"S\"(src), \"d\"(size));
 
 #include <chrono>
 using namespace std::chrono;
@@ -127,7 +129,7 @@ void memcpy_elide_clwb(void* dest, void* src, uint64_t len)
         else {
           // Make elide size a multiple of 64
           elide_size &= (~63);
-          m5_memcpy_elide(dest, (void*)temp_src, elide_size);
+          MCLAZY(dest, (void*)temp_src, elide_size);
         }
         dest = (void *)((char *)dest + elide_size);
         temp_src = (temp_src + elide_size);
@@ -159,30 +161,13 @@ int main(int argc, char *argv[])
     test1 = (uint64_t*)((uint64_t)test1 + 16);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
-    TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 8);
-    TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 4);
-    TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES / 2);
+    TEST_OP(memcpy_elide_clwb, test2, test1, size / 64, ACCESSES / 64);
+    TEST_OP(memcpy_elide_clwb, test2, test1, size / 16, ACCESSES / 16);
+    TEST_OP(memcpy_elide_clwb, test2, test1, size / 4, ACCESSES / 4);
     TEST_OP(memcpy_elide_clwb, test2, test1, size, ACCESSES);
     return 0;
 }
 " > test_clwb.cpp;
-echo "
-#include \"test_headers.h\"
-int main(int argc, char *argv[])
-{
-    size_t size = SIZE;
-    uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size + 16);
-    uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
-    test1 = (uint64_t*)((uint64_t)test1 + 16);
-    printf(\"%p\n\", test1);
-    printf(\"%p\n\", test2);
-    TEST_OP(memcpy, test2, test1, size, ACCESSES / 8);
-    TEST_OP(memcpy, test2, test1, size, ACCESSES / 4);
-    TEST_OP(memcpy, test2, test1, size, ACCESSES / 2);
-    TEST_OP(memcpy, test2, test1, size, ACCESSES);
-    return 0;
-}
-" > test_memcpy.cpp;
 
 tests="test_clwb"
 for i in $tests; do

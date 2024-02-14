@@ -37,6 +37,8 @@ void reset_op(int* dest, int* src, uint64_t size) {
     for(int i = 0; i < size / sizeof(int); i += PAGE_SIZE / sizeof(int)) {
         src[i]  = 500;
         dest[i] = 100;
+        _mm_clflush(&src[i]);
+        _mm_clflush(&dest[i]);
     }
 }
 
@@ -133,11 +135,11 @@ for i in ${sizes[@]}; do
         size_t size;
         int *test1, *test2;
         size = ${i};
-        test1 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
+        test1 = (int*)mmap(NULL, size + 16, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
         test2 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
         printf(\"%p\n\", test1);
         printf(\"%p\n\", test2);
-        TEST_OP(memcpy_elide_pgflush(test2, test1, size));
+        TEST_OP(memcpy_elide_clwb(test2, test1 + 16 / sizeof(int), size));
 
         printf(\"%p\n\", test1);
         printf(\"%p\n\", test2);
@@ -155,6 +157,7 @@ for i in ${sizes[@]}; do
     #include \"test_headers.h\"
     int main(int argc, char *argv[])
     {
+        recv(-2, NULL, 0, 0);
         size_t size;
         int *test1, *test2;
         size = ${i};

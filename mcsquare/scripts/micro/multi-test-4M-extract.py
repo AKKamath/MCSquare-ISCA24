@@ -45,7 +45,7 @@ def extract_ticks(file_path):
     return experiment_ticks
 
 sizes=["4MB"]
-expts=["pgflush_mcsquare", "MCSquare", "memcpy", "zIO"]
+expts=["MCSquare-MA", "MCSquare", "Memcpy", "zIO"]
 def main():
     file_path = sys.argv[1]
     experiment_cycles = extract_cycles(file_path)
