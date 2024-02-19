@@ -529,7 +529,8 @@ MemCtrl::canHandleMCPkt(PacketPtr pkt, bool &canHandle)
         // Check if mem_elide touches current src write.
         for(auto i = mcsquare->m_bpq.begin(); i != mcsquare->m_bpq.end(); ++i) {
             if(RangeSize(pkt->getAddr(), pkt->req->getSize()).
-               intersects(RangeSize(i->first, 64))) {
+               intersects(RangeSize(i->first, 64)) || 
+               (pkt->req->getFlags() & Request::MEM_ELIDE_FREE && pkt->getSize() == 1)) {
                 DPRINTF(MCSquare, "Found mem_elide %lx touching current src write %lx, waiting\n", 
                         pkt->getAddr(), i->first);
                 canHandle = false;
@@ -780,17 +781,19 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
                 DPRINTF(MCSquare, "Found a write to dest %lx!\n", pkt->getAddr());
                 mcsquare->stats.destWriteSizeCPU += pkt->getSize();
                 // Will not create a response. Create a dummy duplicate packet for coherency of CTT
-                if(!pkt->needsResponse()) {
-                    DPRINTF(MCSquare, "Does not need response, create fake packet %lx!\n", pkt->getAddr());
+                //if(!pkt->needsResponse()) {
+                    //DPRINTF(MCSquare, "Does not need response, create fake packet %lx!\n", pkt->getAddr());
                     // Create read to src request
                     auto req = std::make_shared<Request>(pkt->getAddr(), 
                         pkt->getSize(), Request::MEM_ELIDE_REDIRECT_SRC, 
                         Request::funcRequestorId);
+                    if(pkt->req->getFlags() & Request::UNCACHEABLE)
+                        req->setFlags(Request::UNCACHEABLE);
                     auto bouncePkt = Packet::createWrite(req);
                     bouncePkt->allocate();
                     bouncePkt->makeResponse();
                     port.schedTimingResp(bouncePkt, curTick());
-                }
+                //}
             }
             if(mcsquare->isSrc(pkt)) {
                 bool weContain = false;
@@ -1264,8 +1267,8 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
         } else if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
             bool complete = mcsquare->bounceAddr(pkt);
             // We have read the appropriate data. Clear flag.
-            DPRINTF(MCSquare, "Checking redirect packet (c? %d) %lx %lx, addr %lx\n", 
-                complete, pkt->req->_paddr_dest, pkt->req->_paddr_src, pkt->getAddr());
+            DPRINTF(MCSquare, "Checking redirect packet (c? %d) %lx %lx, addr %lx; peek %d\n", 
+                complete, pkt->req->_paddr_dest, pkt->req->_paddr_src, pkt->getAddr(), *pkt->getConstPtr<int>());
             if(complete) {
                 if(pkt->req->getFlags() & Request::MEM_ELIDE_WRITE_SRC) {
                     pkt->cmd = pkt->makeWriteCmd(pkt->req);
