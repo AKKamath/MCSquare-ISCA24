@@ -134,7 +134,7 @@ BaseXBar::calcPacketTiming(PacketPtr pkt, Tick header_delay)
                                            clockPeriod());
         // MCSquare packets have at most 8 bytes of payload for src address
         if(isMCSquare(pkt)) {
-            pkt->payloadDelay = divCeil(8, width) * clockPeriod();\
+            pkt->payloadDelay = divCeil(8, width) * clockPeriod();
         }
     }
 
