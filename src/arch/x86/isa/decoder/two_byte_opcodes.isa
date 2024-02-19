@@ -191,11 +191,19 @@
             0x0: invd(); // privileged
             0x1: wbinvd(); // privileged
             0x2: BasicMemInst::memElideMacroOp({{
-                DPRINTF(PseudoInst, "memcpy_elide(dest = 0x%lx, src = 0x%lx, "
-                    "len = %ld)\n", Rdi, Rsi, Rdx);
-                Fault f = xc->writeMem((uint8_t*)Rsi, Rdx, Rdi, 
-                    Request::MEM_ELIDE | Request::NO_TSO | Request::UNCACHEABLE,
-                    NULL, std::vector<bool>(Rdx, true));
+                Fault f;
+                if(Rsi != NULL) {
+                    DPRINTF(PseudoInst, "memcpy_elide(dest = 0x%lx, src = 0x%lx, "
+                        "len = %ld)\n", Rdi, Rsi, Rdx);
+                    f = xc->writeMem((uint8_t*)Rsi, Rdx, Rdi, 
+                        Request::MEM_ELIDE | Request::NO_TSO | Request::UNCACHEABLE,
+                        NULL, std::vector<bool>(Rdx, true));
+                } else {
+                    DPRINTF(PseudoInst, "memcpy_elide_free(dest = 0x%lx, len = %ld)\n", Rdi, Rdx);
+                    f = xc->writeMem(NULL, Rdx, Rdi, 
+                        Request::MEM_ELIDE_FREE | Request::NO_TSO | Request::UNCACHEABLE,
+                        NULL, std::vector<bool>(Rdx, true));
+                }
                 if(f != NoFault)
                     DPRINTF(PseudoInst, "pseudo_inst::memcpy_elide fault: %s\n", f->name());
                 return f;
