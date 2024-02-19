@@ -158,7 +158,7 @@ class MCSquare : public SimObject {
       bpq_max_sz(params.bpq_size), bpq_acc_lat(params.bpq_penalty), 
       wb_dest_reads(params.wb_dest_reads), ctt_free_frac(params.ctt_free),
       stats(*this) {
-        printf("Created MCSquare with: CTT (%d size, %lu ticks, %f%% free frac), ",
+        printf("Created MCSquare with: CTT (%d size, %lu ticks, %.2f%% free frac), ",
           ctt_max_sz, ctt_acc_lat, ctt_free_frac * 100);
         printf("BPQ (%d size, %lu ticks)\n", bpq_max_sz, bpq_acc_lat);
         ctt_src_entry = 0;
