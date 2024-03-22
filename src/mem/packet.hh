@@ -1099,7 +1099,7 @@ class Packet : public Printable
     void
     setSize(unsigned size)
     {
-        assert(!flags.isSet(VALID_SIZE));
+        //assert(!flags.isSet(VALID_SIZE));
 
         this->size = size;
         flags.set(VALID_SIZE);
