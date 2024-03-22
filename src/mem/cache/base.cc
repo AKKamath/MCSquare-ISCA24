@@ -1250,18 +1250,10 @@ BaseCache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
     // so we don't have to worry about the data
     if(isMCSquare(pkt->req)) {
         // Invalidate destination addresses
-        for(int i = 0; i < pkt->req->getSize(); i += blkSize) {
+        /*for(int i = 0; i < pkt->req->getSize(); i += blkSize) {
             CacheBlk *blk = tags->findBlock(pkt->getAddr() + i, pkt->isSecure());
             if(blk)
                 invalidateBlock(blk);
-        }
-        // Writeback source only for MEM_ELIDE -> currently done manually with clwb
-        /*if(pkt->req->getFlags() & Request::MEM_ELIDE) {
-            for(int i = 0; i < pkt->req->getSize(); i += blkSize) {
-                CacheBlk *blk = tags->findBlock((pkt->req->_paddr_src & (~63)) + i, pkt->isSecure());
-                if(blk && blk->isValid() && blk->isSet(CacheBlk::DirtyBit))
-                    writebacks.push_back(writebackBlk(blk));
-            }
         }*/
         return false;
     }
@@ -2007,6 +1999,14 @@ BaseCache::sendWriteQueuePacket(WriteQueueEntry* wq_entry)
         // it gets retried
         return true;
     } else {
+        if(isMCSquare(tgt_pkt)) {
+            // Invalidate destination addresses
+            for(int i = 0; i < tgt_pkt->req->getSize(); i += blkSize) {
+                CacheBlk *blk = tags->findBlock(tgt_pkt->getAddr() + i, tgt_pkt->isSecure());
+                if(blk)
+                    invalidateBlock(blk);
+            }
+        }
         markInService(wq_entry);
         return false;
     }
