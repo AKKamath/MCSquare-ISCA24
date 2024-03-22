@@ -34,6 +34,7 @@ configs/dram/lowp_sweep.cfg
 .vscode
 .pyeni
 **/results/
+**/figures/
 **.txt
 **.iso
 **.img
