@@ -208,8 +208,7 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
 
     const bool snoop_caches = !system->bypassCaches() &&
         pkt->cmd != MemCmd::WriteClean &&
-        !isMCSquare(pkt) && 
-        !(pkt->req->isUncacheable() && pkt->getSize() < 64);
+        !isMCSquare(pkt);
     if (snoop_caches) {
         assert(pkt->snoopDelay == 0);
 
