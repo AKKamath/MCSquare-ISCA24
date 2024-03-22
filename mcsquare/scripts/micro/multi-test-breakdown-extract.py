@@ -68,7 +68,7 @@ def main():
     print()
     '''
     experiment_ticks = extract_ticks(file_path)
-    print("Total ticks")
+    print("Overhead (%)")
     print("Copy size", end="\t")
     for expt in expts:
         print("%s" % expt, end="\t"),
@@ -87,10 +87,11 @@ def main():
             i += 1
         print()
 
+    plt.figure(figsize=(8, 4))
     for expt in expts:
         plt.plot(sizes, expt_results[expt], '.-', label=expt)  # Plot the chart
     plt.xlabel('Copy size')  # Label the x-axis
-    plt.ylabel('Overhead contribution')  # Label the x-axis
+    plt.ylabel('Overhead contribution (%)')  # Label the x-axis
     plt.legend()
     plt.savefig(sys.argv[2])  # Save the chart to a file
 

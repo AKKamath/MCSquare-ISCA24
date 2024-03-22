@@ -74,18 +74,18 @@ def main():
     experiment_ticks_file1 = extract_ticks("results/micro/" + file_paths[0] + "/stats.txt")
     experiment_ticks_file2 = extract_ticks("results/micro/" + file_paths[1] + "/stats.txt")
 
-    experiment_ticks = {}
+    expt_nano = {}
     for expt in file1 + [file2]:
-        experiment_ticks[expt] = []
+        expt_nano[expt] = []
     
     i = 0
     for size in sizes:
         for expt in file1:
-            experiment_ticks[expt].append(experiment_ticks_file1[i])
+            expt_nano[expt].append(experiment_ticks_file1[i] / 1000)
             i += 1
     i = 0
     for size in sizes:
-        experiment_ticks[file2].append(experiment_ticks_file2[i])
+        expt_nano[file2].append(experiment_ticks_file2[i] / 1000)
         i += 1
        
     print("Total ticks")
@@ -106,7 +106,7 @@ def main():
                 # 4MB exceeds cache size and is not representative of cached performance
                 print("", end="\t"),
             else:
-                print("%d" % experiment_ticks[expt][i], end="\t"),
+                print("%d" % expt_nano[expt][i], end="\t"),
         print()
         i += 1
     plt.figure(figsize=(8, 4))
@@ -114,12 +114,12 @@ def main():
         if(expt == "zIO"):
             # zIO is only active for 16KB and above
             # Can verify this by seeing if "fast copies: 1" is outputted by zIO
-            plt.plot(sizes[4:], experiment_ticks[expt][4:], '.-', label=expt)
+            plt.plot(sizes[4:], expt_nano[expt][4:], '.-', label=expt)
         elif expt == "Touched memcpy":
             # 4MB exceeds cache size and is not representative of cached performance
-            plt.plot(sizes[:-2], experiment_ticks[expt][:len(sizes)-2], '.-', label=expt)
+            plt.plot(sizes[:-1], expt_nano[expt][:len(sizes)-1], '.-', label=expt)
         else:
-            plt.plot(sizes, experiment_ticks[expt][:len(sizes)], '.-', label=expt)
+            plt.plot(sizes, expt_nano[expt][:len(sizes)], '.-', label=expt)
     plt.xlabel('Copy size')  # Label the x-axis
     plt.ylabel('Copy latency (ns)')  # Label the x-axis
     plt.yscale('log')
