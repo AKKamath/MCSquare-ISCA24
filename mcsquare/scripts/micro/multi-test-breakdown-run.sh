@@ -135,9 +135,9 @@ for i in ${sizes[@]}; do
         size = ${i};
         test1 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
         test2 = (int*)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
-        printf(\"%p\n\", test1);
-        printf(\"%p\n\", test2);
-        TEST_OP(memcpy_elide_pgflush(test2, test1, size));
+        //printf(\"%p\n\", test1);
+        //printf(\"%p\n\", test2);
+        //TEST_OP(memcpy_elide_pgflush(test2, test1, size));
 
         printf(\"%p\n\", test1);
         printf(\"%p\n\", test2);

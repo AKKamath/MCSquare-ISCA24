@@ -1,5 +1,7 @@
 import re
 import sys
+import matplotlib.pyplot as plt
+import numpy as np
 
 def extract_cycles(file_path):
     with open(file_path, 'r') as file:
@@ -44,14 +46,14 @@ def extract_ticks(file_path):
 
     return experiment_ticks
 
-sizes=[64, 256, "1KB", "4KB", "16KB", "64KB", "256KB", "1MB"]
-expts=["pgflush_mcsquare", "clwb_mcsquare", "memcpy", "zIO"]
+sizes=[64, 256, "1KB", "4KB", "16KB", "64KB", "256KB", "1MB", "4MB"]
+zio_ignore = [64, 256, "1KB", "4KB"]
+file1=["(MC)^2", "Memcpy", "zIO"]
+file2="Touched memcpy"
+expts=["Memcpy", "Touched memcpy", "zIO", "(MC)^2"]
 def main():
-    file_path = sys.argv[1]
-    if len(sys.argv) > 2:
-        global expts
-        expts = sys.argv[2].split()
-
+    file_paths = sys.argv[1].split()
+    '''
     experiment_cycles = extract_cycles(file_path)
     print("Max CPU cycles")
     print("size", end="\t")
@@ -67,8 +69,25 @@ def main():
             i += 1
         print()
     print()
+    '''
+    # Extract data from files and place into dict
+    experiment_ticks_file1 = extract_ticks("results/micro/" + file_paths[0] + "/stats.txt")
+    experiment_ticks_file2 = extract_ticks("results/micro/" + file_paths[1] + "/stats.txt")
 
-    experiment_ticks = extract_ticks(file_path)
+    experiment_ticks = {}
+    for expt in file1 + [file2]:
+        experiment_ticks[expt] = []
+    
+    i = 0
+    for size in sizes:
+        for expt in file1:
+            experiment_ticks[expt].append(experiment_ticks_file1[i])
+            i += 1
+    i = 0
+    for size in sizes:
+        experiment_ticks[file2].append(experiment_ticks_file2[i])
+        i += 1
+       
     print("Total ticks")
     print("size", end="\t")
     for expt in expts:
@@ -79,10 +98,33 @@ def main():
     for size in sizes:
         print("%s" % size, end="\t"),
         for expt in expts:
-            print("%d" % experiment_ticks[i], end="\t"),
-            i += 1
+            if(expt == "zIO" and size in zio_ignore):
+                # zIO is only active for 16KB and above
+                # Can verify this by seeing if "fast copies: 1" is outputted by zIO
+                print("", end="\t"),
+            elif expt == "Touched memcpy" and size == "4MB":
+                # 4MB exceeds cache size and is not representative of cached performance
+                print("", end="\t"),
+            else:
+                print("%d" % experiment_ticks[expt][i], end="\t"),
         print()
-
+        i += 1
+    plt.figure(figsize=(8, 4))
+    for expt in expts:
+        if(expt == "zIO"):
+            # zIO is only active for 16KB and above
+            # Can verify this by seeing if "fast copies: 1" is outputted by zIO
+            plt.plot(sizes[4:], experiment_ticks[expt][4:], '.-', label=expt)
+        elif expt == "Touched memcpy":
+            # 4MB exceeds cache size and is not representative of cached performance
+            plt.plot(sizes[:-2], experiment_ticks[expt][:len(sizes)-2], '.-', label=expt)
+        else:
+            plt.plot(sizes, experiment_ticks[expt][:len(sizes)], '.-', label=expt)
+    plt.xlabel('Copy size')  # Label the x-axis
+    plt.ylabel('Copy latency (ns)')  # Label the x-axis
+    plt.yscale('log')
+    plt.legend()
+    plt.savefig(sys.argv[2])  # Save the chart to a file
 
 if __name__ == "__main__":
     main()

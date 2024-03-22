@@ -125,7 +125,7 @@ void memcpy_elide_free(void* dest, uint64_t len)
 }
 " > test_headers.h
 
-sizes=(64 256 1024 4096 16384 65536 262144 1048576)
+sizes=(64 256 1024 4096 16384 65536 262144 1048576 4194304)
 for i in ${sizes[@]}; do
     echo ${i};
     echo "
@@ -141,9 +141,9 @@ for i in ${sizes[@]}; do
         printf(\"%p\n\", test2);
         TEST_OP(memcpy_elide_clwb(test2, test1 + 16 / sizeof(int), size));
 
-        printf(\"%p\n\", test1);
-        printf(\"%p\n\", test2);
-        TEST_OP(memcpy_elide_clwb(test2, test1, size));
+        //printf(\"%p\n\", test1);
+        //printf(\"%p\n\", test2);
+        //TEST_OP(memcpy_elide_clwb(test2, test1, size));
 
         printf(\"%p\n\", test1);
         printf(\"%p\n\", test2);

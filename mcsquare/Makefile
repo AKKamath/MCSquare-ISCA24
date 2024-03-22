@@ -1,10 +1,11 @@
 .PHONY: mount_img umount_img compile_gem5 launch_gem5
 
 GEM5_IMG ?= ./os/mcsquare-20.04.final.img
-GEM5_CPU ?= O3CPU#TimingSimpleCPU
+GEM5_CPU ?= O3CPU
 GEM5_KERNEL ?= ./os/vmlinux-5.7
 GEM5_TESTS ?= micro/rand-access micro/seq-access#seq-access #rand-access #multi-test##script# #seq-access 
 RESULTS ?= ./results
+FIGURES ?= ./figures
 
 # Default command. Compile GEM5.
 compile_gem5:
@@ -74,6 +75,7 @@ TEST ?= ${GEM5_TESTS}
 SCRIPT ?= ./scripts/${TEST}-run.sh
 single_launch_gem5:
 	mkdir -p ${RESULTS}/${TEST};
+	mkdir -p ${FIGURES};
 	sudo ../build/X86/gem5.opt --debug-flags=PseudoInst -d ${RESULTS}/${TEST} ./fs.py \
 		--fast-forward=1000000000000000000 --mem-size=${MEM_SIZE} --cpu-type=${GEM5_CPU} \
 		--l1i-hwp-type=StridePrefetcher ${PREFETCH} --command-line=${CMD_LINE} --ctt-size=${CTT_SIZE} \
@@ -83,6 +85,7 @@ single_launch_gem5:
 
 single_launch_gem5_debug:
 	mkdir -p ${RESULTS}/${TEST};
+	mkdir -p ${FIGURES};
 	sudo gdb -x run.sh --args ../build/X86/gem5.opt --debug-flags=PseudoInst,MCSquare -d ${RESULTS}/${TEST} ./fs.py \
 		--fast-forward=1000000000000000000 --mem-size=${MEM_SIZE} --cpu-type=${GEM5_CPU} \
 		--l1i-hwp-type=StridePrefetcher ${PREFETCH} --command-line=${CMD_LINE} --ctt-size=${CTT_SIZE} \
@@ -91,51 +94,68 @@ single_launch_gem5_debug:
 		--mem-channels=${MEM_CHAN} --script=${SCRIPT} > ${RESULTS}/${TEST}/fullout_${GEM5_CPU}.txt 2> ${RESULTS}/${TEST}/err_${GEM5_CPU}.txt;
 
 extract_test:
-	python ${SCRIPT} ${RESULTS}/${TEST}/stats.txt > ${RESULTS}/${TEST}_res.txt;
+	mkdir -p ${FIGURES};
+	python ${SCRIPT} ${RESULTS}/${TEST}/stats.txt
 
-#$(MAKE) single_launch_gem5 TEST=redis/$${test}-1 SCRIPT=./scripts/redis/$${test}-run.sh BPQ_SIZE=1 & \
-	$(MAKE) single_launch_gem5 TEST=redis/$${test}-2 SCRIPT=./scripts/redis/$${test}-run.sh BPQ_SIZE=2 & \
-	$(MAKE) single_launch_gem5 TEST=redis/$${test}-8 SCRIPT=./scripts/redis/$${test}-run.sh BPQ_SIZE=8 &		
+############################################################
+#                   MICROBENCHMARK LAUNCHERS			   #
+############################################################
+
+# FIGURE 10
+launch_micro_latency:
+	sudo ls; \
+	$(MAKE) compile_gem5; \
+	$(MAKE) single_launch_gem5 TEST=micro/multi-test & \
+	$(MAKE) single_launch_gem5 TEST=micro/multi-test-cached & \
+	wait; \
+	$(MAKE) -s extract_micro_latency > ${RESULTS}/figure_10.txt;
+
+extract_micro_latency:
+	python scripts/micro/multi-test-extract.py "multi-test multi-test-cached" ${FIGURES}/figure_10.png
+
+#	$(MAKE) single_launch_gem5 TEST=micro/multi-test-zio & \
+	$(MAKE) single_launch_gem5 TEST=micro/multi-test-mc & \
+# FIGURE 11
+launch_micro_breakdown:
+	sudo ls; \
+	$(MAKE) compile_gem5; \
+	$(MAKE) single_launch_gem5 TEST=micro/multi-test-breakdown;
+	$(MAKE) -s extract_micro_breakdown > ${RESULTS}/figure_11.txt;
+
+extract_micro_breakdown:
+	python scripts/micro/multi-test-breakdown-extract.py ${RESULTS}/micro/multi-test-breakdown/stats.txt ${FIGURES}/figure_11.png
+
+# FIGURE 12
+launch_micro_seq:
+	sudo ls; \
+	$(MAKE) compile_gem5; \
+	$(MAKE) single_launch_gem5 TEST=micro/seq/MCSquare SCRIPT=./scripts/micro/seq-access-run.sh & \
+	$(MAKE) single_launch_gem5 TEST=micro/seq/MCSquare-noprefetch SCRIPT=./scripts/micro/seq-access-run.sh PREFETCH= & \
+	$(MAKE) single_launch_gem5 TEST=micro/seq/Memcpy SCRIPT=./scripts/micro/seq-access-memcpy-run.sh & \
+	$(MAKE) single_launch_gem5 TEST=micro/seq/zIO SCRIPT=./scripts/micro/seq-access-zio-run.sh & \
+	wait;
+	$(MAKE) extract_micro_seq > ${RESULTS}/micro/figure_12.txt;
+
+extract_micro_seq:
+	python scripts/micro/access-batch-extract.py results/micro/seq/ "Memcpy zIO MCSquare MCSquare-noprefetch" ${FIGURES}/figure_12.png
+
+# FIGURE 13
+launch_micro_rand:
+	sudo ls; \
+	$(MAKE) compile_gem5; \
+	$(MAKE) single_launch_gem5 TEST=micro/rand/access-0 SCRIPT=./scripts/micro/rand-access-run.sh DEST_WB=0 & \
+	$(MAKE) single_launch_gem5 TEST=micro/rand/access-3 SCRIPT=./scripts/micro/rand-access-run.sh DEST_WB=3 & \
+	$(MAKE) single_launch_gem5 TEST=micro/rand/access-memcpy SCRIPT=./scripts/micro/rand-access-memcpy-run.sh & \
+	$(MAKE) single_launch_gem5 TEST=micro/rand/access-zio SCRIPT=./scripts/micro/rand-access-zio-run.sh & \
+	wait;
+	$(MAKE) extract_micro_rand > ${RESULTS}/micro/figure_13.txt;
+
+extract_micro_rand:
+	python scripts/micro/access-batch-extract.py results/micro/rand/ "access-0 access-3 access-memcpy access-zio" ${FIGURES}/figure_13.png
 
 ############################################################
 #                   EXPERIMENT LAUNCHERS				   #
 ############################################################
-
-REDIS_TESTS ?= redis-64K redis
-REDIS_MC_TESTS ?= redis-mc-64K redis-mc
-launch_redis:
-	sudo ls; \
-	$(MAKE) compile_gem5; \
-	for test in ${REDIS_TESTS}; do \
-		$(MAKE) single_launch_gem5 TEST=redis/$${test} & \
-	done; \
-	for test in ${REDIS_MC_TESTS}; do \
-		$(MAKE) single_launch_gem5 TEST=redis/$${test} GEM5_KERNEL=./os/vmlinux-5.7-lazycopy & \
-	done; \
-	wait;
-
-	$(MAKE) extract_redis > ${RESULTS}/redis.txt;
-
-extract_redis:
-	python ./scripts/redis/redis-extract.py "${REDIS_TESTS}" "${REDIS_MC_TESTS}" "4"
-
-MC_PICKLE_IMG ?= ./os/mcsquare-20.04-python.img
-PICKLE_TESTS ?= pickle-var#pickle-128K pickle-16K pickle-1M 
-PICKLE_MC_TESTS ?= pickle-mc-var#pickle-mc-128K pickle-mc-16K pickle-mc-1M 
-launch_pickle:
-	sudo ls; \
-	$(MAKE) compile_gem5; \
-	for i in ${PICKLE_MC_TESTS}; do \
-		$(MAKE) single_launch_gem5_debug GEM5_IMG=${MC_PICKLE_IMG} TEST=pickle/$$i & \
-	done; \
-	for i in ${PICKLE_TESTS}; do \
-		$(MAKE) single_launch_gem5 TEST=pickle/$$i & \
-	done; \
-	wait;
-	$(MAKE) extract_pickle > ${RESULTS}/pickle/pickle.txt;
-
-extract_pickle:
-	python ./scripts/pickle/pickle-extract.py "${PICKLE_TESTS} ${PICKLE_MC_TESTS}"
 
 PROTOBUF_TESTS ?= protobuf-mc protobuf protobuf-zio
 PB_CTT_SIZE=1024 2048 4096
@@ -173,34 +193,6 @@ launch_src_write:
 
 extract_src_write:
 	python scripts/micro/access-batch-extract.py results/micro/src-write/seq-access- "memcpy ${SRC_WRITE_SIZES}"
-
-launch_seq_access_micro:
-	sudo ls; \
-	$(MAKE) compile_gem5; \
-	$(MAKE) single_launch_gem5 TEST=micro/seq/MCSquare SCRIPT=./scripts/micro/seq-access-run.sh & \
-	$(MAKE) single_launch_gem5 TEST=micro/seq/MCSquare-noprefetch SCRIPT=./scripts/micro/seq-access-run.sh PREFETCH= & \
-	$(MAKE) single_launch_gem5 TEST=micro/seq/Memcpy SCRIPT=./scripts/micro/seq-access-memcpy-run.sh & \
-	$(MAKE) single_launch_gem5 TEST=micro/seq/zIO SCRIPT=./scripts/micro/seq-access-zio-run.sh & \
-	wait;
-
-	$(MAKE) extract_seq_access > ${RESULTS}/micro/seq-access-batch.txt;
-
-extract_seq_access:
-	python scripts/micro/access-batch-extract.py results/micro/seq/ "Memcpy zIO MCSquare MCSquare-noprefetch"
-
-launch_rand_access_micro:
-	sudo ls; \
-	$(MAKE) compile_gem5; \
-	$(MAKE) single_launch_gem5 TEST=micro/rand/access-0 SCRIPT=./scripts/micro/rand-access-run.sh DEST_WB=0 & \
-	$(MAKE) single_launch_gem5 TEST=micro/rand/access-3 SCRIPT=./scripts/micro/rand-access-run.sh DEST_WB=3 & \
-	$(MAKE) single_launch_gem5 TEST=micro/rand/access-memcpy SCRIPT=./scripts/micro/rand-access-memcpy-run.sh & \
-	$(MAKE) single_launch_gem5 TEST=micro/rand/access-zio SCRIPT=./scripts/micro/rand-access-zio-run.sh & \
-	wait;
-
-	$(MAKE) extract_rand_access > ${RESULTS}/micro/rand-access-batch.txt;
-
-extract_rand_access:
-	python scripts/micro/access-batch-extract.py results/micro/rand/ "access-0 access-3 access-memcpy access-zio"
 
 MONGO_TESTS ?= mongo-100K 
 MONGO_ZIO_TESTS ?= mongo-100K-zio

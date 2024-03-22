@@ -1,5 +1,7 @@
 import re
 import sys
+import matplotlib.pyplot as plt
+import numpy as np
 
 def extract_cycles(file_path):
     with open(file_path, 'r') as file:
@@ -44,11 +46,11 @@ def extract_ticks(file_path):
 
     return experiment_ticks
 
-sizes=[64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304]
-expts=["PG_MCSquare-Flush", "PG_MCSquare-Lazy", "MCSquare-Flush", "MCSquare-Lazy"]
+sizes=[64, 256, "1KB", "4KB", "16KB", "64KB", "256KB", "1MB", "4MB"]
+expts=["Cacheline writeback", "Packet to memctrl"]
 def main():
     file_path = sys.argv[1]
-
+    '''
     experiment_cycles = extract_cycles(file_path)
     print("Max CPU cycles")
     print("size", end="\t")
@@ -64,22 +66,33 @@ def main():
             i += 1
         print()
     print()
-
+    '''
     experiment_ticks = extract_ticks(file_path)
     print("Total ticks")
-    print("size", end="\t")
+    print("Copy size", end="\t")
     for expt in expts:
         print("%s" % expt, end="\t"),
     print(""),
 
     i = 0
+    expt_results = {}
     for size in sizes:
         print("%s" % size, end="\t"),
+        total = float(sum(experiment_ticks[i:i+len(expts)]))
         for expt in expts:
-            print("%d" % experiment_ticks[i], end="\t"),
+            print("%.2f" % (100.0 * float(experiment_ticks[i]) / total), end="\t"),
+            if expt not in expt_results:
+                expt_results[expt] = []
+            expt_results[expt].append(100.0 * float(experiment_ticks[i]) / total)
             i += 1
         print()
 
+    for expt in expts:
+        plt.plot(sizes, expt_results[expt], '.-', label=expt)  # Plot the chart
+    plt.xlabel('Copy size')  # Label the x-axis
+    plt.ylabel('Overhead contribution')  # Label the x-axis
+    plt.legend()
+    plt.savefig(sys.argv[2])  # Save the chart to a file
 
 if __name__ == "__main__":
     main()
