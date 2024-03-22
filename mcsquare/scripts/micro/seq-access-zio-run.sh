@@ -245,5 +245,4 @@ echo "Done compilation"
 m5 exit
 
 LD_PRELOAD=${ZIO_BIN} ./test_memcpy
-LD_PRELOAD=${ZIO_BIN} ./test_memcpy_align
 m5 exit

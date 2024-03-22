@@ -113,8 +113,6 @@ launch_micro_latency:
 extract_micro_latency:
 	python scripts/micro/multi-test-extract.py "multi-test multi-test-cached" ${FIGURES}/figure_10.png
 
-#	$(MAKE) single_launch_gem5 TEST=micro/multi-test-zio & \
-	$(MAKE) single_launch_gem5 TEST=micro/multi-test-mc & \
 # FIGURE 11
 launch_micro_breakdown:
 	sudo ls; \
@@ -130,28 +128,28 @@ launch_micro_seq:
 	sudo ls; \
 	$(MAKE) compile_gem5; \
 	$(MAKE) single_launch_gem5 TEST=micro/seq/MCSquare SCRIPT=./scripts/micro/seq-access-run.sh & \
-	$(MAKE) single_launch_gem5 TEST=micro/seq/MCSquare-noprefetch SCRIPT=./scripts/micro/seq-access-run.sh PREFETCH= & \
+	$(MAKE) single_launch_gem5 TEST=micro/seq/MCSquare-NoPrefetch SCRIPT=./scripts/micro/seq-access-run.sh PREFETCH= & \
 	$(MAKE) single_launch_gem5 TEST=micro/seq/Memcpy SCRIPT=./scripts/micro/seq-access-memcpy-run.sh & \
 	$(MAKE) single_launch_gem5 TEST=micro/seq/zIO SCRIPT=./scripts/micro/seq-access-zio-run.sh & \
 	wait;
-	$(MAKE) extract_micro_seq > ${RESULTS}/micro/figure_12.txt;
+	$(MAKE) extract_micro_seq > ${RESULTS}/figure_12.txt;
 
 extract_micro_seq:
-	python scripts/micro/access-batch-extract.py results/micro/seq/ "Memcpy zIO MCSquare MCSquare-noprefetch" ${FIGURES}/figure_12.png
+	python scripts/micro/seq-extract.py results/micro/seq/ "Memcpy zIO MCSquare MCSquare-NoPrefetch" ${FIGURES}/figure_12.png
 
 # FIGURE 13
 launch_micro_rand:
 	sudo ls; \
 	$(MAKE) compile_gem5; \
-	$(MAKE) single_launch_gem5 TEST=micro/rand/access-0 SCRIPT=./scripts/micro/rand-access-run.sh DEST_WB=0 & \
-	$(MAKE) single_launch_gem5 TEST=micro/rand/access-3 SCRIPT=./scripts/micro/rand-access-run.sh DEST_WB=3 & \
-	$(MAKE) single_launch_gem5 TEST=micro/rand/access-memcpy SCRIPT=./scripts/micro/rand-access-memcpy-run.sh & \
-	$(MAKE) single_launch_gem5 TEST=micro/rand/access-zio SCRIPT=./scripts/micro/rand-access-zio-run.sh & \
+	$(MAKE) single_launch_gem5 TEST=micro/rand/MCSquare-NoWriteback SCRIPT=./scripts/micro/rand-access-run.sh DEST_WB=0 & \
+	$(MAKE) single_launch_gem5 TEST=micro/rand/MCSquare SCRIPT=./scripts/micro/rand-access-run.sh DEST_WB=3 & \
+	$(MAKE) single_launch_gem5 TEST=micro/rand/Memcpy SCRIPT=./scripts/micro/rand-access-memcpy-run.sh & \
+	$(MAKE) single_launch_gem5 TEST=micro/rand/zIO SCRIPT=./scripts/micro/rand-access-zio-run.sh & \
 	wait;
-	$(MAKE) extract_micro_rand > ${RESULTS}/micro/figure_13.txt;
+	$(MAKE) extract_micro_rand > ${RESULTS}/figure_13.txt;
 
 extract_micro_rand:
-	python scripts/micro/access-batch-extract.py results/micro/rand/ "access-0 access-3 access-memcpy access-zio" ${FIGURES}/figure_13.png
+	python scripts/micro/rand-extract.py results/micro/rand/ "Memcpy zIO MCSquare MCSquare-NoWriteback" ${FIGURES}/figure_13.png
 
 ############################################################
 #                   EXPERIMENT LAUNCHERS				   #
