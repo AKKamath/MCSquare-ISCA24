@@ -245,7 +245,7 @@ int main(int argc, char *argv[])
     return 0;
 }
 " > test_memcpy_align.cpp;
-tests="test_memcpy test_memcpy_align"
+tests="test_memcpy"
 for i in $tests; do
     g++ $i.cpp -o $i -lrt -g -march=native -I../include ../util/m5/build/x86/out/libm5.a
 done
