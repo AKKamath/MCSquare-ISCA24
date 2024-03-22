@@ -104,7 +104,7 @@ def main():
     for size in sizes:
         print("%s%%" % size, end="\t")
         for config in norm_perf.keys():
-            print("%f" % (norm_perf[config][i]), end="\t")
+            print("%.3f" % (norm_perf[config][i]), end="\t")
         print()
         i += 1
 
