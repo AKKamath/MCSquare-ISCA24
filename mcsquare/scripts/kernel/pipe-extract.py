@@ -12,9 +12,9 @@ def extract_cycles(file_path):
 
     for line in data:
         # Regex to match your data format
-        match = re.match(r"(\d+\.\d+): Read pipe: (\d+) cycles. Read (\d+), acc (\d+);", line.strip())
+        match = re.match(r"0 threads, (\d+) size; (\d+\.\d+): Read pipe: (\d+) cycles. Read (\d+), acc (\d+);", line.strip())
         if match:
-            size, cycles, read_time, acc_time = str(match.group(1)), int(match.group(2)), int(match.group(3)), int(match.group(4))
+            size, cycles, read_time, acc_time = str(match.group(1)), int(match.group(3)), int(match.group(4)), int(match.group(5))
             if size not in exp_cycles:
                 exp_cycles[size] = []  # Initialize empty list for size if not present
                 reads[size] = []
@@ -36,6 +36,7 @@ def main():
             for i in cycles:
                 print(f"{i}", end="\t")
             print("")
+'''
         print(f"{test} - reads")
         for size, cycles in reads.items():
             print(f"{size}", end="\t")
@@ -48,7 +49,7 @@ def main():
             for i in cycles:
                 print(f"{i}", end="\t")
             print("")
-
+'''
 
 if __name__ == "__main__":
     main()

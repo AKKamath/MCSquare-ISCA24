@@ -1,3 +1,13 @@
+cd /home/akkamath/gem5-zIO/util/m5
+scons build/x86/out
+cd /home/akkamath/gem5-zIO/mcsquare
+
+pushd lib
+make mc_interpose.so
+popd
+
+MC_BIN=/home/akkamath/gem5-zIO/mcsquare/lib/mc_interpose.so
+
 pushd /home/akkamath/cicada-engine
 mkdir -p build
 pushd build
@@ -29,7 +39,7 @@ m5 exit
 
 for i in 0.0625 0.125 0.25 0.5 1; do
     m5 resetstats
-    ./test_tx ${ROWS} 4 0 0 ${TX} ${THREADS} ${i} 0 ${ROW_SIZE}
+    LD_PRELOAD=${MC_BIN} ./test_tx ${ROWS} 4 0 0 ${TX} ${THREADS} ${i} 2 ${ROW_SIZE}
     m5 dumpstats
 done
 

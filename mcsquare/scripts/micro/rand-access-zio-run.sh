@@ -207,6 +207,7 @@ echo "
 #include \"test_headers.h\"
 int main(int argc, char *argv[])
 {
+    recv(-2, NULL, 0, 0);
     size_t size = SIZE;
     uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size + 16);
     uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
@@ -228,6 +229,7 @@ echo "
 #include \"test_headers.h\"
 int main(int argc, char *argv[])
 {
+    recv(-2, NULL, 0, 0);
     size_t size = SIZE;
     uint64_t *test1 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);
     uint64_t *test2 = (uint64_t*)aligned_alloc(PAGE_SIZE, size);

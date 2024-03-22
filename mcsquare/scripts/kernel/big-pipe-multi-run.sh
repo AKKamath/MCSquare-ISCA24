@@ -79,6 +79,7 @@ void recv_pipe(double accesses) {
 }
 
 int main(int argc, char *argv[]) {
+    m5_memcpy_elide_free(&start, 1);
     // Get arguments
     accesses = strtod(argv[1], NULL);
     xfer_size = atoi(argv[2]);
@@ -112,7 +113,6 @@ int main(int argc, char *argv[]) {
 
     if (cpid == 0) {    /* Child reads from pipe */
         recv_pipe(accesses);
-        m5_memcpy_elide_free(&start, 1);
     } else {
         send_pipe();
         wait(NULL);                /* Wait for child */
@@ -129,11 +129,11 @@ sleep 2
 m5 exit
 
 SIZES="1021 2045 4093 8189 16381 32765"
-THREADS="0"
+THREADS="1"
 
 #for j in 1 0.5 0.25 0; do
-    for xfer in ${SIZES}; do
-        for log_threads in ${THREADS}; do
+    for log_threads in ${THREADS}; do
+        for xfer in ${SIZES}; do
             printf "Running xfer: %d log_threads: %d\n" $xfer $log_threads
             ./pipe_test 0 $xfer $log_threads || true
         done
