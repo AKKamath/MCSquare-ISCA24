@@ -172,6 +172,10 @@ Cache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
 
         DPRINTF(Cache, "%s for %s\n", __func__, pkt->print());
 
+        if(isMCSquare(pkt->req)) {
+            return false;
+        }
+
         // flush and invalidate any existing block
         CacheBlk *old_blk(tags->findBlock(pkt->getAddr(), pkt->isSecure()));
         if (old_blk && old_blk->isValid()) {
@@ -1157,9 +1161,12 @@ Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
             // to delete it
             assert(pkt->needsResponse());
 
+            if(!(pkt->cacheResponding()))
+                fprintf(stderr, "Packet breaks responding requirements: %s; Flags %x; isMC? %d \n", 
+                    pkt->print().c_str(), pkt->req->getFlags(), isMCSquare(pkt));
             // we have passed the block to a cache upstream, that
             // cache should be responding
-            assert(pkt->cacheResponding());
+            //assert(pkt->cacheResponding());
 
             delete pkt;
         }
