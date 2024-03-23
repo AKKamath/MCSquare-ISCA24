@@ -84,6 +84,6 @@ sleep 2
 m5 exit
 
 ./copy_test $((64 * 1024 * 1024)) 100
-
+sleep 1
 # All done!
 m5 exit

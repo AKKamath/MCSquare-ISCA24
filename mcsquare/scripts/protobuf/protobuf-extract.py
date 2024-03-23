@@ -70,7 +70,7 @@ def main():
     extract_time("results/protobuf/protobuf/system.pc.com_1.device", 0, 0)
     extract_time("results/protobuf/protobuf-zio/system.pc.com_1.device", 0, 1)
 
-    print("Wall time")
+    '''
     if 0 in wall_time:
         if 0 in wall_time[0]:
             print("Baseline\t%d" % (wall_time[0][0]))
@@ -82,84 +82,60 @@ def main():
             print("zIO\tN")
 
     print("MCSquare", end="\t")
+    '''
+    print("Figure 20(a) - Wall time")
     for size in ctt_sizes.split():
-        print("%s" % (size), end="\t")
+        print("\t%s" % (size), end="")
     print()
     for frac in ctt_fracs.split():
-        print("%s" % (frac), end="\t")
+        print("%d%%" % (float(frac) * 100), end="\t")
         for size in ctt_sizes.split():
             if size in wall_time:
                 if frac in wall_time[size]:
-                    print("%d" % (wall_time[size][frac]), end="\t")
+                    print("%.1f" % (float(wall_time[size][frac]) / 1000000), end="\t")
                 else:
                     print("N", end="\t")
             else:
                 print("N", end="\t")
         print()
     print()
-    
-    print("CPU time")
-    if 0 in cpu_time:
-        if 0 in cpu_time[0]:
-            print("Baseline\t%d" % (cpu_time[0][0]))
-        else:
-            print("Baseline\tN")
-        if 1 in cpu_time[0]:
-            print("zIO\t%d" % (cpu_time[0][1]))
-        else:
-            print("zIO\tN")
-
-    print("MCSquare", end="\t")
+    max_stalls = 0
     for size in ctt_sizes.split():
-        print("%s" % (size), end="\t")
+        if size in stalls:
+            max_stalls = max(max_stalls, max(stalls[size].values()))
+    print("Figure 20(b) - Stalls")
+    #print("MCSquare", end="\t")
+    for size in ctt_sizes.split():
+        print("\t%s" % (size), end="")
     print()
     for frac in ctt_fracs.split():
-        print("%s" % (frac), end="\t")
-        for size in ctt_sizes.split():
-            if size in cpu_time:
-                if frac in cpu_time[size]:
-                    print("%d" % (cpu_time[size][frac]), end="\t")
-                else:
-                    print("N", end="\t")
-            else:
-                print("N", end="\t")
-        print()
-    print()
-
-    print("Stalls")
-    print("MCSquare", end="\t")
-    for size in ctt_sizes.split():
-        print("%s" % (size), end="\t")
-    print()
-    for frac in ctt_fracs.split():
-        print("%s" % (frac), end="\t")
+        print("%d%%" % (float(frac) * 100), end="\t")
         for size in ctt_sizes.split():
             if size in stalls:
                 if frac in stalls[size]:
-                    print("%d" % (stalls[size][frac]), end="\t")
+                    print("%.0f%%" % (float(stalls[size][frac] * 100) / max_stalls), end="\t")
                 else:
                     print("N", end="\t")
             else:
                 print("N", end="\t")
         print()
 
-    print("Membw")
-    print("MCSquare", end="\t")
-    for size in ctt_sizes.split():
-        print("%s" % (size), end="\t")
-    print()
-    for frac in ctt_fracs.split():
-        print("%s" % (frac), end="\t")
-        for size in ctt_sizes.split():
-            if size in membw:
-                if frac in membw[size]:
-                    print("%d" % (membw[size][frac]), end="\t")
-                else:
-                    print("N", end="\t")
-            else:
-                print("N", end="\t")
-        print()
-
+    bar_labels=["Baseline", "zIO", "(MC)^2"]
+    import matplotlib.pyplot as plt
+    import numpy as np
+    plt.figure(figsize=(8, 4))
+    y = np.arange(2)
+    height=0.2
+    times=[ [wall_time[0][0] / 1000000, cpu_time[0][0] / 1000000],
+            [wall_time[0][1] / 1000000, cpu_time[0][1] / 1000000], 
+            [wall_time["2048"]["0.5"] / 1000000, cpu_time["2048"]["0.5"] / 1000000]]
+    plt.barh(y-0.2, times[0], height)
+    plt.barh(y, times[1], height)
+    plt.barh(y+0.2, times[2], height)
+    plt.yticks(y, ["Wall\nclock\ntime", "CPU time"])
+    plt.xlabel('Runtime (ms)')  # Label the x-axis
+    plt.legend(bar_labels)
+    plt.savefig(sys.argv[3])  # Save the chart to a file
 
 if __name__ == "__main__":
     main()
