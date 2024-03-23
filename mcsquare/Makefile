@@ -257,18 +257,19 @@ extract_hugepage_access:
 launch_pipe:
 	sudo ls; \
 	$(MAKE) compile_gem5; \
-	$(MAKE) single_launch_gem5 GEM5_TESTS=kernel/big-pipe SCRIPT=./scripts/kernel/big-pipe-multi-run.sh & \
-	$(MAKE) single_launch_gem5_debug TEST=kernel/big-pipe-lazy SCRIPT=./scripts/kernel/big-pipe-multi-run.sh GEM5_KERNEL=./os/vmlinux-5.7-lazycopy2 & \
+	$(MAKE) single_launch_gem5 TEST=kernel/big-pipe SCRIPT=./scripts/kernel/big-pipe-multi-run.sh & \
+	$(MAKE) single_launch_gem5 TEST=kernel/big-pipe-lazy SCRIPT=./scripts/kernel/big-pipe-multi-run.sh GEM5_KERNEL=./os/vmlinux-5.7-lazycopy2 & \
 	wait;
-	$(MAKE) -s extract_pipe > ${RESULTS}/kernel/big-pipe.txt;
+	$(MAKE) -s extract_pipe > ${RESULTS}/figure_19.txt;
 
 extract_pipe:
-	python3 scripts/kernel/pipe-extract.py "big-pipe big-pipe-lazy"
+	python3 scripts/kernel/pipe-extract.py "big-pipe big-pipe-lazy" ${FIGURES}/figure_19.png
 
 ############################################################
 #                   SENSITIVITY LAUNCHERS				   #
 ############################################################
 
+# FIGURE 21
 SRC_WRITE_SIZES ?= 1 2 4 8 16
 launch_src_write:
 	sudo ls; \
@@ -277,10 +278,10 @@ launch_src_write:
 		$(MAKE) single_launch_gem5 TEST=micro/src-write/seq-access-$${i} SCRIPT=./scripts/micro/seq-access-src-write-run.sh BPQ_SIZE=$${i} & \
 	done; \
 	wait;
-	$(MAKE) extract_src_write > ${RESULTS}/micro/seq-access-src-write-batch.txt;
+	$(MAKE) -s extract_src_write > ${RESULTS}/figure_21.txt;
 
 extract_src_write:
-	python3 scripts/micro/access-batch-extract.py results/micro/src-write/seq-access- "${SRC_WRITE_SIZES}"
+	python3 scripts/micro/src-write-extract.py results/micro/src-write/seq-access- "${SRC_WRITE_SIZES}" ${FIGURES}/figure_21.png
 
 ############################################################
 #                 EXTRA MISC TESTS (IGNORE)	               #
@@ -293,15 +294,6 @@ launch_ctt_overflow:
 		$(MAKE) single_launch_gem5_debug TEST=micro/overflow/ctt-overflow-$${i} SCRIPT=./scripts/micro/ctt-overflow-run.sh CTT_SIZE=$${i} & \
 	done; \
 	wait;
-
-
-#	$(MAKE) single_launch_gem5 TEST=kernel/hugepage-copy-lazy GEM5_KERNEL=${GEM5_KERNEL}-lazycopy SCRIPT=./scripts/kernel/hugepage-copy-run.sh & \
-	$(MAKE) single_launch_gem5 TEST=kernel/hugepage-copy SCRIPT=./scripts/kernel/hugepage-copy-run.sh & \
-	$(MAKE) single_launch_gem5 TEST=kernel/hugepage-copy-mini-lazy GEM5_KERNEL=${GEM5_KERNEL}-lazycopy SCRIPT=./scripts/kernel/hugepage-copy-mini-run.sh & \
-	$(MAKE) single_launch_gem5 TEST=kernel/hugepage-copy-mini SCRIPT=./scripts/kernel/hugepage-copy-mini-run.sh & \
-	$(MAKE) single_launch_gem5 TEST=kernel/hugepage-copy-rmw-lazy GEM5_KERNEL=${GEM5_KERNEL}-lazycopy SCRIPT=./scripts/kernel/hugepage-copy-rmw-run.sh & \
-	$(MAKE) single_launch_gem5 TEST=kernel/hugepage-copy-rmw SCRIPT=./scripts/kernel/hugepage-copy-rmw-run.sh & \
-
 
 #
 	
