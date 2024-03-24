@@ -17,7 +17,8 @@ def extract_time(file_path, expt, iter):
             latency = float(match.group(1))
             if expt not in wall_time:
                 wall_time[expt] = []  # Initialize empty list for size if not present
-            wall_time[expt].append(latency)
+            if(latency > 13000 and latency < 20000):
+                wall_time[expt].append(latency)
 
 stalls = {}
 def extract_stalls(file_path, expt, iter):
@@ -41,33 +42,36 @@ def extract_stalls(file_path, expt, iter):
                 break
 
 def main():
-    expts = sys.argv[1]
-    iters = sys.argv[2]
-    for i in iters.split():
-        for expt in expts.split():
+    expts = sys.argv[1].split()
+    labels = sys.argv[2].split()
+    iters = sys.argv[3].split()
+    for i in iters:
+        for expt in expts:
             extract_time("results/mongo-new/" + expt + "-" + i + "/system.pc.com_1.device", expt, i)
             extract_stalls("results/mongo-new/" + expt + "-" + i + "/stats.txt", expt, i)
 
-    print("Insertion latency")
-    for expt in expts.split():
-        if(expt not in wall_time):
-            print(expt, "not found")
-            continue
-        print(expt, end="\t")
-        for val in wall_time[expt]:
-            print("%.2f" % (val), end="\t")
+    avg_latency = []
+    print("Insertion latency (ms)")
+    for index in range(len(expts)):
+        if(expts[index] not in wall_time):
+            print("OUTPUT OF " + expt + " NOT FOUND. RERUN MONGO!")
+            return
+        if(len(wall_time[expts[index]]) < 3):
+            print("\n\n" + expts[index] + " HAD AN ERROR. TO RERUN EXPERIMENT EXECUTE: make launch_mongo_{:s}\n\n".format(expt.split("/")[0]))
+            return
+        print(labels[index], end="\t")
+        avg_latency.append(sum(wall_time[expts[index]][:3]) / 3000)
+        print("%.2f" % (avg_latency[index]), end="\t")
         print()
-    print()
-
-    print("Stalls")
-    for expt in expts.split():
-        if(expt not in stalls):
-            print(expt, "not found")
-            continue
-        print(expt, end="\t")
-        for val in stalls[expt]:
-            print("%.2f" % (val), end="\t")
-        print()
+    
+    bar_labels=labels
+    import matplotlib.pyplot as plt
+    import numpy as np
+    plt.figure(figsize=(8, 4))
+    plt.barh(labels, avg_latency, color=['darkblue', 'purple', 'orange'])
+    plt.xlabel('Average latency (ms)')  # Label the x-axis
+    plt.xticks(np.arange(0, max(avg_latency) + 5, step=5))
+    plt.savefig(sys.argv[4])  # Save the chart to a file
 
 if __name__ == "__main__":
     main()

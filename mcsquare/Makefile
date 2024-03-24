@@ -185,10 +185,11 @@ extract_protobuf:
 MONGO_TESTS_DUP ?= mongo-100K
 MONGO_ZIO_TESTS_DUP ?= mongo-100K-zio
 MONGO_MC_TESTS_DUP ?= mongo-100K-mc-all
+MONGO_ITERS ?= 1 2 3 4
 launch_mongo:
 	sudo ls; \
 	$(MAKE) compile_gem5; \
-	for j in 1 2 3 4; do \
+	for j in ${MONGO_ITERS}; do \
 		for i in ${MONGO_MC_TESTS_DUP}; do \
 			$(MAKE) single_launch_gem5 TEST=mongo-new/mc/$${i}-$${j} SCRIPT=./scripts/mongo/$$i-run.sh & \
 		done; \
@@ -202,8 +203,29 @@ launch_mongo:
 	wait;
 	$(MAKE) -s extract_mongo > ${RESULTS}/figure_15.txt;
 
+launch_mongo_norm:
+	for j in ${MONGO_ITERS}; do \
+		for i in ${MONGO_TESTS_DUP}; do \
+			$(MAKE) single_launch_gem5 TEST=mongo-new/norm/$${i}-$${j} SCRIPT=./scripts/mongo/$$i-run.sh & \
+		done; \
+	wait;
+
+launch_mongo_zio:
+	for j in ${MONGO_ITERS}; do \
+		for i in ${MONGO_ZIO_TESTS_DUP}; do \
+			$(MAKE) single_launch_gem5 TEST=mongo-new/zio/$${i}-$${j} SCRIPT=./scripts/mongo/$$i-run.sh & \
+		done; \
+	wait;
+
+launch_mongo_mc:
+	for j in ${MONGO_ITERS}; do \
+		for i in ${MONGO_MC_TESTS_DUP}; do \
+			$(MAKE) single_launch_gem5 TEST=mongo-new/mc/$${i}-$${j} SCRIPT=./scripts/mongo/$$i-run.sh & \
+		done; \
+	wait;
+
 extract_mongo:
-	python3 ./scripts/mongo/mongo-extract.py "mc/mongo-100K-mc-all zio/mongo-100K-zio norm/mongo-100K " "1 2 3 4"
+	python3 ./scripts/mongo/mongo-extract.py "norm/mongo-100K zio/mongo-100K-zio mc/mongo-100K-mc-all" "Baseline zIO (MC)^2" "${MONGO_ITERS}" ${FIGURES}/figure_15.png
 
 # FIGURES 16, 17
 MVCC_SIZES=4K
@@ -212,6 +234,7 @@ launch_mvcc:
 	$(MAKE) compile_gem5; \
 	for SIZE in ${MVCC_SIZES}; do \
 		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-$${SIZE} & \
+		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-mc-$${SIZE} & \
 		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-nt-mc-$${SIZE} & \
 		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-zio-$${SIZE} & \
 		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-rmw-$${SIZE} & \
@@ -222,24 +245,9 @@ launch_mvcc:
 	$(MAKE) -s extract_mvcc > ${RESULTS}/figures_16_17.txt;
 
 MVCC_FRAC=0.0625 0.125 0.25 0.5 1
-MVCC_TESTS=4K nt-mc-4K zio-4K rmw-4K rmw-mc-4K rmw-zio-4K
+MVCC_TESTS=4K nt-mc-4K mc-4K zio-4K rmw-4K rmw-mc-4K rmw-zio-4K
 extract_mvcc:
-	printf "Throughput\t"; \
-	for FRAC in ${MVCC_FRAC}; do \
-		printf "$${FRAC}\t"; \
-	done;
-	printf "\n";
-
-	for SIZE in ${MVCC_SIZES}; do \
-		for TEST in ${MVCC_TESTS}; do \
-			printf "cicada-$${TEST}\t"; \
-			thput=$$(grep "throughput" ${RESULTS}/mvcc/cicada-$${TEST}/system.pc.com_1.device | grep -oE "[0-9]+\.[0-9]+" | tail -n +2); \
-			for i in $${thput}; do \
-				printf "$${i}\t"; \
-			done; \
-			printf "\n"; \
-		done; \
-	done;
+	python3 scripts/mvcc/cicada-extract.py "${MVCC_TESTS}" "${MVCC_FRAC}" "${FIGURES}/figure_16.png ${FIGURES}/figure_17.png"
 
 # FIGURE 18
 launch_hugepage_access:
@@ -254,16 +262,19 @@ extract_hugepage_access:
 	python3 scripts/kernel/page-copy-extract.py "hugepage-copy-rmw-mini hugepage-copy-rmw-mini-lazy" "Native (MC)^2" ${FIGURES}/figure_18.png
 
 # FIGURE 19
+PIPE_SIZES=1K 2K 4K 8K 16K
 launch_pipe:
 	sudo ls; \
 	$(MAKE) compile_gem5; \
-	$(MAKE) single_launch_gem5 TEST=kernel/big-pipe SCRIPT=./scripts/kernel/big-pipe-multi-run.sh & \
-	$(MAKE) single_launch_gem5 TEST=kernel/big-pipe-lazy SCRIPT=./scripts/kernel/big-pipe-multi-run.sh GEM5_KERNEL=./os/vmlinux-5.7-lazycopy2 & \
+	for i in ${PIPE_SIZES}; do \
+		$(MAKE) single_launch_gem5 TEST=kernel/pipe/big-pipe-$${i} SCRIPT=./scripts/kernel/pipe/big-pipe-$${i}-run.sh & \
+		$(MAKE) single_launch_gem5 TEST=kernel/pipe/big-pipe-lazy-$${i} SCRIPT=./scripts/kernel/pipe/big-pipe-$${i}-run.sh GEM5_KERNEL=./os/vmlinux-5.7-lazycopy2 & \
+	done; \
 	wait;
 	$(MAKE) -s extract_pipe > ${RESULTS}/figure_19.txt;
 
 extract_pipe:
-	python3 scripts/kernel/pipe-extract.py "big-pipe big-pipe-lazy" ${FIGURES}/figure_19.png
+	python3 scripts/kernel/pipe-extract.py "big-pipe big-pipe-lazy" "Native (MC)^2" "${PIPE_SIZES}" ${FIGURES}/figure_19.png
 
 ############################################################
 #                   SENSITIVITY LAUNCHERS				   #

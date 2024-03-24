@@ -63,12 +63,6 @@ void recv_pipe(double accesses) {
         if(read(pipefd[0], &arr[xfer_size / sizeof(int) * j], xfer_size) > 0) {
             uint64_t end2 = TIME_NOW;
             read_time += TIME_DIFF(end2, start2);
-            start2 = TIME_NOW;
-            for(int i = 0; i < xfer_size * accesses / sizeof(int); ++i) {
-                data += arr[xfer_size / sizeof(int) * j + i];
-                //printf(\"%x %d\n\", &arr[xfer_size / sizeof(int) * j + i], data);
-            }
-            acc_time += TIME_DIFF(TIME_NOW, start2);
             //memcpy_elide_free(&arr[xfer_size / sizeof(int) * j], xfer_size);
         }
     }
@@ -128,14 +122,16 @@ echo "Done compilation"
 sleep 2
 m5 exit
 
-SIZES="1021 2045 4093 8189 16381 32765"
+SIZES="8189"
 THREADS="0"
 
 #for j in 1 0.5 0.25 0; do
     for xfer in ${SIZES}; do
         for log_threads in ${THREADS}; do
             printf "Running xfer: %d log_threads: %d\n" $xfer $log_threads
+            m5 resetstats
             ./pipe_test 0 $xfer $log_threads || true
+            m5 dumpstats
         done
     done
 #done
