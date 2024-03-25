@@ -15,7 +15,7 @@ cmake ..
 make -j test_tx
 
 # Setup huge pages for cicada
-echo "200" > /proc/sys/vm/nr_hugepages
+echo "450" > /proc/sys/vm/nr_hugepages
 
 mnthuge=/mnt/huge
 echo "Creating $mnthuge and mounting as hugetlbfs"

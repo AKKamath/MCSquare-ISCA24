@@ -236,18 +236,22 @@ launch_mvcc:
 		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-$${SIZE} & \
 		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-mc-$${SIZE} & \
 		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-nt-mc-$${SIZE} & \
-		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-zio-$${SIZE} & \
 		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-rmw-$${SIZE} & \
 		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-rmw-mc-$${SIZE} & \
-		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-rmw-zio-$${SIZE} & \
 	done; \
 	wait;
 	$(MAKE) -s extract_mvcc > ${RESULTS}/figures_16_17.txt;
 
+# zIO gives an error due to not supporting MAP_SHARED
+#		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-zio-$${SIZE} & \
+		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-rmw-zio-$${SIZE} & \
+
 MVCC_FRAC=0.0625 0.125 0.25 0.5 1
-MVCC_TESTS=4K nt-mc-4K mc-4K zio-4K rmw-4K rmw-mc-4K rmw-zio-4K
+MVCC_TESTS ?=4K mc-4K nt-mc-4K
+MVCC_RMW_TESTS ?=rmw-4K rmw-mc-4K
 extract_mvcc:
-	python3 scripts/mvcc/cicada-extract.py "${MVCC_TESTS}" "${MVCC_FRAC}" "${FIGURES}/figure_16.png ${FIGURES}/figure_17.png"
+	python3 scripts/mvcc/cicada-extract.py "${MVCC_RMW_TESTS}" "Baseline (MC)^2" "${MVCC_FRAC}" ${FIGURES}/figure_16.png
+	python3 scripts/mvcc/cicada-extract.py "${MVCC_TESTS}" "Baseline (MC)^2 (MC)^2[Nontemporal]" "${MVCC_FRAC}" ${FIGURES}/figure_17.png
 
 # FIGURE 18
 launch_hugepage_access:
