@@ -97,6 +97,29 @@ extract_test:
 	mkdir -p ${FIGURES};
 	python3 ${SCRIPT} ${RESULTS}/${TEST}/stats.txt
 
+launch_all:
+	$(MAKE) launch_micro_latency
+	$(MAKE) launch_micro_breakdown
+	$(MAKE) launch_micro_seq
+	$(MAKE) launch_micro_rand
+	$(MAKE) launch_protobuf
+	$(MAKE) launch_mongo
+	$(MAKE) launch_mvcc
+	$(MAKE) launch_hugepage_access
+	$(MAKE) launch_pipe
+	$(MAKE) launch_src_write
+
+extract_all:
+	$(MAKE) -s extract_micro_latency > ${RESULTS}/figure_10.txt;
+	$(MAKE) -s extract_micro_breakdown > ${RESULTS}/figure_11.txt;
+	$(MAKE) -s extract_micro_seq > ${RESULTS}/figure_12.txt;
+	$(MAKE) -s extract_micro_rand > ${RESULTS}/figure_13.txt;
+	$(MAKE) -s extract_protobuf > ${RESULTS}/figure_20.txt;
+	$(MAKE) -s extract_mongo > ${RESULTS}/figure_15.txt;
+	$(MAKE) -s extract_mvcc > ${RESULTS}/figures_16_17.txt;
+	$(MAKE) -s extract_hugepage_access > ${RESULTS}/figure_18.txt;
+	$(MAKE) -s extract_pipe > ${RESULTS}/figure_19.txt;
+	$(MAKE) -s extract_src_write > ${RESULTS}/figure_21.txt;
 ############################################################
 #                   MICROBENCHMARK LAUNCHERS			   #
 ############################################################
