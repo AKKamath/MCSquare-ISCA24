@@ -8,7 +8,7 @@ This operation avoids copying data at the time of function call.  Instead, if co
 
 This repository consists of the source code of the simulator and all scripts needed to replicate the figures in the paper.
 
-The original readme for gem5 has been retained as [README_GEM5](README_GEM5).
+The original readme for gem5 has been retained as [README](README).
 
 We shall first explain how to replicate our results, then highlight the important files and folders contained in this repository.
 
