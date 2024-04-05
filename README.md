@@ -8,7 +8,7 @@ This operation avoids copying data at the time of function call.  Instead, if co
 
 This repository consists of the source code of the simulator and all scripts needed to replicate the figures in the paper.
 
-The original readme for gem5 has been retained as [README](README).
+The original readme for gem5 has been retained as [README](./README).
 
 We shall first explain how to replicate our results, then highlight the important files and folders contained in this repository.
 
@@ -63,9 +63,9 @@ make launch_src_write       #Figure 21:   10 min
 
 ## Source code
 There majority of this repository matches gem5. A new folder called [mcsquare](./mcsquare) contains files required for execution. It contains the following subfolders:
-- **[lib](mcsquare/lib/)**: This folder contains the runtime code for $(MC)^{2}$, consisting of a header file (mcsquare.h) containing the function for lazy memcpy (memcpy_elide_clwb), and the library interposers. These files are used within simulation to convert benchmarks from standard memcpy to lazy memcpy. 
-- **[scripts](mcsquare/scripts/)**: This folder contains bash and python scripts for executing experiments and plotting the different graphs.
-- **[results](mcsquare/results/)**: This folder is generated on running an experiment, and contains the raw output for the experiment.
-- **[figures](mcsquare/figures/)**: This folder is generated on completing an experiment, and contains the plotted figure for the experiment.
+- **[lib](./mcsquare/lib/)**: This folder contains the runtime code for $(MC)^{2}$, consisting of a header file (mcsquare.h) containing the function for lazy memcpy (memcpy_elide_clwb), and the library interposers. These files are used within simulation to convert benchmarks from standard memcpy to lazy memcpy. 
+- **[scripts](./mcsquare/scripts/)**: This folder contains bash and python scripts for executing experiments and plotting the different graphs.
+- **[results](./mcsquare/results/)**: This folder is generated on running an experiment, and contains the raw output for the experiment.
+- **[figures](./mcsquare/figures/)**: This folder is generated on completing an experiment, and contains the plotted figure for the experiment.
 
-The functionality for (MC)$^{2}$ is encapsulated in [src/mem/mcsquare.cc](src/mem/mcsquare.cc), which contains the implementation of the tables and buffers required. Other modifications were performed in the [memory controller](src/mem/mem_ctrl.cc) and [memory interconnect](src/mem/coherent_xbar.cc) to support this new feature.
+The functionality for $(MC)^{2}$ is encapsulated in [src/mem/mcsquare.cc](./src/mem/mcsquare.cc), which contains the implementation of the tables and buffers required. Other modifications were performed in the [memory controller](./src/mem/mem_ctrl.cc) and [memory interconnect](./src/mem/coherent_xbar.cc) to support this new feature.
