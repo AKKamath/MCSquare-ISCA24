@@ -140,8 +140,8 @@ class MCSquare : public SimObject {
     const int wb_dest_reads;
   public:
     const double ctt_free_frac;
-    Addr ctt_src_entry;
-    int ctt_count;
+    std::map<Addr, int> ctt_freeing;
+    int ctt_freeing_max;
 
     int wbDestReads() {
       return wb_dest_reads;
@@ -157,12 +157,12 @@ class MCSquare : public SimObject {
       ctt_max_sz(params.ctt_size), ctt_acc_lat(params.ctt_penalty), 
       bpq_max_sz(params.bpq_size), bpq_acc_lat(params.bpq_penalty), 
       wb_dest_reads(params.wb_dest_reads), ctt_free_frac(params.ctt_free),
+      ctt_freeing_max(params.ctt_freeing_max),
       stats(*this) {
-        printf("Created MCSquare with: CTT (%d size, %lu ticks, %.2f%% free frac), ",
-          ctt_max_sz, ctt_acc_lat, ctt_free_frac * 100);
+        printf("Created MCSquare with: CTT (%d size, %lu ticks, %.2f%% free frac, %d freeing), ",
+          ctt_max_sz, ctt_acc_lat, ctt_free_frac * 100, ctt_freeing_max);
         printf("BPQ (%d size, %lu ticks)\n", bpq_max_sz, bpq_acc_lat);
-        ctt_src_entry = 0;
-        ctt_count = 0;
+        ctt_freeing.clear();
       }
 
     // CTT management functions

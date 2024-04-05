@@ -438,14 +438,19 @@ MemCtrl::checkBounceTable() {
         ++i;
     }
     // See if bounce for src is complete
-    if(mcsquare->ctt_src_entry) {
-        MCSquare::Types type = mcsquare->contains(mcsquare->ctt_src_entry, 64);
-        if(mcsquare->ctt_count == 0 || type != MCSquare::Types::TYPE_SRC) {
-            DPRINTF(MCSquare, "Reset ctt_src_entry %lx. CTT size now %d\n", 
-                    mcsquare->ctt_src_entry, mcsquare->getCTTSize());
-            mcsquare->ctt_src_entry = 0;
-            mcsquare->ctt_count = 0;
-            //clearCTT();
+    if(mcsquare->ctt_freeing.size()) {
+        for(auto i = mcsquare->ctt_freeing.begin(); i != mcsquare->ctt_freeing.end();) {
+            MCSquare::Types type = mcsquare->contains(i->first, 64);
+            if(i->second == 0 || type != MCSquare::Types::TYPE_SRC) {
+                DPRINTF(MCSquare, "Reset ctt_src_entry %lx. CTT size now %d\n", 
+                        i->first, mcsquare->getCTTSize());
+                auto j = i;
+                ++i;
+                mcsquare->ctt_freeing.erase(j);
+                //clearCTT();
+            } else {
+                ++i;
+            }
         }
     }
 }
@@ -453,16 +458,16 @@ MemCtrl::checkBounceTable() {
 void MemCtrl::clearCTT() {
     // Start freeing CTT entries if needed
     if(mcsquare->getCTTSize() >= mcsquare->ctt_free_frac * mcsquare->getMaxCTTSize() &&
-        mcsquare->ctt_count == 0 && mcsquare->ctt_src_entry == 0) {
-        mcsquare->ctt_src_entry = mcsquare->getAddrToFree(getAddrRanges());
-        if(mcsquare->ctt_src_entry) {
+        mcsquare->ctt_freeing.size() < mcsquare->ctt_freeing_max) {
+        Addr candidate = mcsquare->getAddrToFree(getAddrRanges());
+        if(candidate) {
             DPRINTF(MCSquare, "%d exceeds threshold of CTT size %d! Freeing entries; Candidate %lx\n", 
                     mcsquare->getCTTSize(), (int)(mcsquare->ctt_free_frac * 
-                    mcsquare->getMaxCTTSize()), mcsquare->ctt_src_entry);
+                    mcsquare->getMaxCTTSize()), candidate);
 
             unsigned size = 64;
             uint32_t burst_size = dram->bytesPerBurst();
-            unsigned offset = mcsquare->ctt_src_entry & (burst_size - 1);
+            unsigned offset = candidate & (burst_size - 1);
             unsigned int pkt_count = divCeil(offset + size, burst_size);
 
             if (readQueueFull(pkt_count)) {
@@ -471,12 +476,12 @@ void MemCtrl::clearCTT() {
             }
 
             // Create read to src request
-            auto req = std::make_shared<Request>(mcsquare->ctt_src_entry, 64, 
+            auto req = std::make_shared<Request>(candidate, 64, 
                 Request::MEM_ELIDE_WRITE_SRC, Request::funcRequestorId);
             auto bouncePkt = Packet::createRead(req);
             bouncePkt->allocate();
 
-            mcsquare->ctt_count = -1;
+            mcsquare->ctt_freeing[candidate] = -1;
 
             if (!addToReadQueue(bouncePkt, pkt_count, dram)) {
                 // If we are not already scheduled to get a request out of the
@@ -764,10 +769,10 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
                         break;
                     }
                 mcsquare->m_bpq.decPkts(pkt->req->_paddr_src);
-                if(mcsquare->ctt_src_entry && mcsquare->ctt_count > 0 && 
-                   pkt->req->_paddr_src == mcsquare->ctt_src_entry) {
-                    mcsquare->ctt_count--;
-                    DPRINTF(MCSquare, "Decrementing ctt_count to %d\n", mcsquare->ctt_count);
+                if(mcsquare->ctt_freeing.find(pkt->req->_paddr_src) != mcsquare->ctt_freeing.end() && 
+                   mcsquare->ctt_freeing[pkt->req->_paddr_src] > 0) {
+                    mcsquare->ctt_freeing[pkt->req->_paddr_src]--;
+                    DPRINTF(MCSquare, "Decrementing ctt_count to %d\n", mcsquare->ctt_freeing[pkt->req->_paddr_src]);
                 }
                 mcsquare->splitEntry(pkt);
                 checkBounceTable();
@@ -914,10 +919,10 @@ MemCtrl::recvTimingReq(PacketPtr pkt)
             }
         if(pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
             mcsquare->m_bpq.decPkts(pkt->req->_paddr_src);
-            if(mcsquare->ctt_src_entry && mcsquare->ctt_count > 0 && 
-               pkt->req->_paddr_src == mcsquare->ctt_src_entry) {
-                mcsquare->ctt_count--;
-                DPRINTF(MCSquare, "Decrementing ctt_count to %d\n", mcsquare->ctt_count);
+            if(mcsquare->ctt_freeing.find(pkt->req->_paddr_src) != mcsquare->ctt_freeing.end() && 
+                mcsquare->ctt_freeing[pkt->req->_paddr_src] > 0) {
+                mcsquare->ctt_freeing[pkt->req->_paddr_src]--;
+                DPRINTF(MCSquare, "Decrementing ctt_count to %d\n", mcsquare->ctt_freeing[pkt->req->_paddr_src]);
             }
             checkBounceTable();
             // Sent as a write to dest. Just acknowledge and ignore.
@@ -1242,19 +1247,18 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency,
                                 (*i)->getAddr());
                 }
                 mcsquare->m_bpq.setPkts(pkt->getAddr(), pktList.size());
-                if(pkt->getAddr() == mcsquare->ctt_src_entry) {
-                    mcsquare->ctt_count = pktList.size();
+                if(mcsquare->ctt_freeing.find(pkt->getAddr()) != mcsquare->ctt_freeing.end()) {
+                    mcsquare->ctt_freeing[pkt->getAddr()] = pktList.size();
                     DPRINTF(MCSquare, "Setting ctt_count to %d for %lx\n", 
-                        mcsquare->ctt_count, mcsquare->ctt_src_entry);
+                        pktList.size(), pkt->getAddr());
                 }
             } else {
                 // Corner case: read to src, but removed from table in between
                 mcsquare->m_bpq.setPkts(pkt->getAddr(), 0);
-                if(pkt->getAddr() == mcsquare->ctt_src_entry) {
-                    mcsquare->ctt_count = 0;
-                    mcsquare->ctt_src_entry = 0;
+                if(mcsquare->ctt_freeing.find(pkt->getAddr()) != mcsquare->ctt_freeing.end()) {
+                    mcsquare->ctt_freeing.erase(pkt->getAddr());
                     DPRINTF(MCSquare, "Setting ctt_count to %d for %lx\n", 
-                        mcsquare->ctt_count, mcsquare->ctt_src_entry);
+                        0, pkt->getAddr());
                 }
                 checkBounceTable();
                 clearCTT();

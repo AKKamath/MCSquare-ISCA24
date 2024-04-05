@@ -115,6 +115,13 @@ def addMCOptions(parser):
         action="store",
         help="How much latency a CTT access adds.",
     )
+    parser.add_argument(
+        "--ctt-free-size",
+        default=1,
+        type=int,
+        action="store",
+        help="How many CTT entries to free at a time.",
+    )
 
 def build_test_system(np):
     cmdline = cmd_line_template()
@@ -382,6 +389,7 @@ for i in range(len(test_sys.mem_ctrls)):
     test_sys.mem_ctrls[i].mcsquare.wb_dest_reads = args.wb_reads
     test_sys.mem_ctrls[i].mcsquare.ctt_free = args.ctt_frac
     test_sys.mem_ctrls[i].mcsquare.ctt_penalty = args.ctt_lat
+    test_sys.mem_ctrls[i].mcsquare.ctt_freeing_max = args.ctt_free_size
 
 if len(bm) == 2:
     drive_sys = build_drive_system(np)

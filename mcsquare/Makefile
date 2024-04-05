@@ -57,6 +57,7 @@ CTT_FRAC ?= 0.5
 CTT_LAT  ?= "787ps"
 BPQ_SIZE ?= 8
 DEST_WB  ?= 3
+CTT_FREE_SIZE ?= 1
 
 CMD_LINE ?= "earlyprintk=ttyS0 console=ttyS0 lpj=7999923 root=/dev/hda1 numa=on"
 
@@ -80,7 +81,7 @@ single_launch_gem5:
 		--fast-forward=1000000000000000000 --mem-size=${MEM_SIZE} --cpu-type=${GEM5_CPU} \
 		--l1i-hwp-type=StridePrefetcher ${PREFETCH} --command-line=${CMD_LINE} --ctt-size=${CTT_SIZE} \
 		--ctt-frac=${CTT_FRAC} --ctt-lat=${CTT_LAT} --cpu-clock="4GHz" --mem-type="DDR4_2400_8x8" --bpq-size=${BPQ_SIZE} \
-		--wb-reads=${DEST_WB} --kernel=${GEM5_KERNEL} --disk-image=${GEM5_IMG} -n ${NCPUS} --caches --l2cache \
+		--wb-reads=${DEST_WB} --kernel=${GEM5_KERNEL} --disk-image=${GEM5_IMG} -n ${NCPUS} --caches --l2cache --ctt-free-size=${CTT_FREE_SIZE} \
 		--mem-channels=${MEM_CHAN} --script=${SCRIPT} > ${RESULTS}/${TEST}/fullout_${GEM5_CPU}.txt 2> ${RESULTS}/${TEST}/err_${GEM5_CPU}.txt;
 
 single_launch_gem5_debug:
@@ -90,7 +91,7 @@ single_launch_gem5_debug:
 		--fast-forward=1000000000000000000 --mem-size=${MEM_SIZE} --cpu-type=${GEM5_CPU} \
 		--l1i-hwp-type=StridePrefetcher ${PREFETCH} --command-line=${CMD_LINE} --ctt-size=${CTT_SIZE} \
 		--ctt-frac=${CTT_FRAC} --ctt-lat=${CTT_LAT} --cpu-clock="4GHz" --mem-type="DDR4_2400_8x8" --bpq-size=${BPQ_SIZE} \
-		--wb-reads=${DEST_WB} --kernel=${GEM5_KERNEL} --disk-image=${GEM5_IMG} -n ${NCPUS} --caches --l2cache \
+		--wb-reads=${DEST_WB} --kernel=${GEM5_KERNEL} --disk-image=${GEM5_IMG} -n ${NCPUS} --caches --l2cache --ctt-free-size=${CTT_FREE_SIZE} \
 		--mem-channels=${MEM_CHAN} --script=${SCRIPT} > ${RESULTS}/${TEST}/fullout_${GEM5_CPU}.txt 2> ${RESULTS}/${TEST}/err_${GEM5_CPU}.txt;
 
 extract_test:
@@ -180,7 +181,7 @@ extract_micro_rand:
 
 # FIGURES 14, 20
 PROTOBUF_TESTS ?= protobuf-mc protobuf protobuf-zio
-PB_CTT_SIZE=1024 2048 4096
+PB_CTT_SIZE=1024 2048 4096 8192 16384
 PB_FLUSH_FRAC=0.1 0.25 0.5 0.75 0.9
 launch_protobuf:
 	sudo ls; \
@@ -371,6 +372,26 @@ launch_mvcc_sweep:
 	$(MAKE) single_launch_gem5 TEST=mvcc_sweep/cicada-rmw-4K \
 		SCRIPT=./scripts/mvcc/cicada-rmw-sweep-4K-run.sh & \
 
+MVCC_FREE_SIZE=1 2 4 8
+MVCC_THREADS=1 2 4 8
+launch_mvcc_sweep2:
+	sudo ls; \
+	$(MAKE) compile_gem5; \
+	MVCC_SCRIPT=./scripts/mvcc/cicada-rmw-mc-sweep; \
+	MVCC_TEST=mvcc_sweep2/cicada-rmw-mc; \
+	for thread in ${MVCC_THREADS}; do \
+		for ctt_free in ${MVCC_FREE_SIZE}; do \
+			$(MAKE) single_launch_gem5 TEST=$${MVCC_TEST}-$${thread}T-$${ctt_free} \
+				SCRIPT=$${MVCC_SCRIPT}-$${thread}T-run.sh CTT_FREE_SIZE=$${ctt_free} & \
+		done; \
+		$(MAKE) single_launch_gem5 TEST=mvcc_sweep2/cicada-rmw-$${thread}T \
+			SCRIPT=./scripts/mvcc/cicada-rmw-sweep-$${thread}T-run.sh & \
+	done; \
+	$(MAKE) extract_mvcc_sweep_dup;
+
+extract_mvcc_sweep_dup:
+	python3 scripts/mvcc/cicada-dup-extract.py "${MVCC_THREADS}" "${MVCC_FREE_SIZE}"
+
 extract_mvcc_sweep:
 	tests=""; \
 	for ctt_frac in ${PB_FLUSH_FRAC}; do \
@@ -400,3 +421,20 @@ extract_mvcc_sweep:
 
 extract_mvcc_sweep2:
 	python3 scripts/mvcc/cicada-sweep-extract.py "${PB_CTT_SIZE}" "${PB_FLUSH_FRAC}"
+
+PIPE_MULTI_SIZES ?= 1K 2K 4K 8K 16K
+THREADS ?= 1 2 4
+launch_pipe_multi:
+	sudo ls; \
+	$(MAKE) compile_gem5; \
+	for i in ${PIPE_MULTI_SIZES}; do \
+		for j in ${THREADS}; do \
+			$(MAKE) single_launch_gem5 TEST=kernel/pipe/big-pipe-$${j}T-$${i} SCRIPT=./scripts/kernel/pipe/big-pipe-$${i}-$${j}T-run.sh & \
+			$(MAKE) single_launch_gem5 TEST=kernel/pipe/big-pipe-lazy-$${j}T-$${i} SCRIPT=./scripts/kernel/pipe/big-pipe-$${i}-$${j}T-run.sh GEM5_KERNEL=./os/vmlinux-5.7-lazycopy2 & \
+		done; \
+	done; \
+	wait;
+	$(MAKE) -s extract_pipe_multi > ${RESULTS}/figure_33.txt;
+
+extract_pipe_multi:
+	python3 scripts/kernel/pipe-multi-extract.py "big-pipe big-pipe-lazy" "${THREADS}" "Native (MC)^2" "${PIPE_MULTI_SIZES}" ${FIGURES}/figure_33.png

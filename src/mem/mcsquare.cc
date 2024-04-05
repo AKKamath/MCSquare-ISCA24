@@ -262,7 +262,8 @@ MCSquare::getAddrToFree(AddrRangeList addrList)
     uint64_t minSize = 0;
     for(auto i = m_ctt.begin(); i != m_ctt.end(); ++i) {
         for(auto j = addrList.begin(); j != addrList.end(); ++j)
-            if(j->contains(i->src & ~((uint64_t)63))) {
+            if(j->contains(i->src & ~((uint64_t)63)) && 
+                ctt_freeing.find(i->src & ~((uint64_t)63)) == ctt_freeing.end()) {
                 if(i->size < minSize || minSize == 0) {
                     minAddr = i->src & ~((uint64_t)63);
                     minSize = i->size;

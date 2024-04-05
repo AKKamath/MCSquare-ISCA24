@@ -1029,7 +1029,10 @@ Cache::doTimingSupplyResponse(PacketPtr req_pkt, const uint8_t *blk_data,
         // packet needs it (the only packets that carry data are read
         // responses)
         pkt = new Packet(req_pkt, false, req_pkt->isRead());
-
+    if(!(req_pkt->req->isUncacheable() || req_pkt->isInvalidate() ||
+           pkt->hasSharers())) {
+            fprintf(stderr, "Err, invalid packet req_pkt: %s\n", req_pkt->print().c_str());
+           }
     assert(req_pkt->req->isUncacheable() || req_pkt->isInvalidate() ||
            pkt->hasSharers());
     pkt->makeTimingResponse();
