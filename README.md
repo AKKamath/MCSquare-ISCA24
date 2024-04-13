@@ -29,24 +29,12 @@ sudo apt install build-essential git m4 scons zlib1g zlib1g-dev \
     libboost-all-dev pkg-config python3-tk libvirt-clients \
     bridge-utils python3-matplotlib python3-numpy
 ```
+## Running experiments
 
-## Running all figures and generating outputs 
+### Individually executing experiments
 
 Once the setup for gem5 is completed, proceed with the following steps to run the artifact. 
-To run all the benchmarks and generate figures run:
-```bash
-make launch_all 
-```
-To regenerate all outputs run: 
-```bash
-make extract_all
-```
-The outputs will be generated as two seperate files. A TXT file is generated in results/figure_X.txt, where X is the specific figure number, which contains the raw numbers to be plotted. figures/figure_X.png will contain the plotted figure. The exception is for Figure 20, where only a TXT file containing the table is generated.
-Minor variances in performance numbers occur from run to run, but general trends should remain stable.
-
-## Running figures individually
-
-Alternatively, individual figures can be obtained by running the following commands:
+Individual experiments can be run and figures obtained by running the following commands:
 ```bash
 make launch_micro_latency   #Figure 10:   10 min
 make launch_micro_breakdown #Figure 11:   10 min
@@ -59,13 +47,30 @@ make launch_hugepage_access #Figure 18    20 min
 make launch_pipe            #Figure 19:   15 min
 make launch_src_write       #Figure 21:   10 min
 ```
+The outputs will be generated as two seperate files. A TXT file is generated in results/figure_X.txt, where X is the specific figure number, which contains the raw numbers to be plotted. figures/figure_X.png will contain the plotted figure. The exception is for Figure 20, where only a TXT file containing the table is generated.
+Minor variances in performance numbers occur from run to run, but general trends should remain stable.
 
+### Running all experiments
 
-## Source code
-There majority of this repository matches gem5. A new folder called [mcsquare](./mcsquare) contains files required for execution. It contains the following subfolders:
-- **[lib](./mcsquare/lib/)**: This folder contains the runtime code for $(MC)^{2}$, consisting of a header file (mcsquare.h) containing the function for lazy memcpy (memcpy_elide_clwb), and the library interposers. These files are used within simulation to convert benchmarks from standard memcpy to lazy memcpy. 
-- **[scripts](./mcsquare/scripts/)**: This folder contains bash and python scripts for executing experiments and plotting the different graphs.
-- **[results](./mcsquare/results/)**: This folder is generated on running an experiment, and contains the raw output for the experiment.
-- **[figures](./mcsquare/figures/)**: This folder is generated on completing an experiment, and contains the plotted figure for the experiment.
+Alternatively, to run all the benchmarks and generate figures run:
+```bash
+make launch_all 
+```
+To regenerate all outputs run: 
+```bash
+make extract_all
+```
+
+## $(MC)^{2}$ source code
+A new folder called [mcsquare](./mcsquare) contains the files that implement $(MC)^{2}$ and the scripts required for execution. It contains the following subfolders:
+- **mcsquare/lib**: This folder contains the runtime code for $(MC)^{2}$, consisting of a header file (mcsquare.h) containing the function for lazy memcpy (memcpy_elide_clwb), and the library interposers. These files are used within simulation to convert benchmarks from standard memcpy to lazy memcpy. 
+- **mcsquare/scripts**: This folder contains bash and python scripts for executing experiments and plotting the different graphs.
+- **mcsquare/results**: This folder is generated on running an experiment, and contains the raw output for the experiment.
+- **mcsquare/figures**: This folder is generated on completing an experiment, and contains the plotted figure for the experiment.
 
 The functionality for $(MC)^{2}$ is encapsulated in [src/mem/mcsquare.cc](./src/mem/mcsquare.cc), which contains the implementation of the tables and buffers required. Other modifications were performed in the [memory controller](./src/mem/mem_ctrl.cc) and [memory interconnect](./src/mem/coherent_xbar.cc) to support this new feature.
+
+## Companion repositories
+- [Modified linux](https://github.com/AKKamath/linux-5.7) contains the source code of Linux modified to use lazy copies on huge page faults and when writing to/reading from pipes.
+- [Modified Cicada](https://github.com/AKKamath/cicada-engine) contains the source code of the Cicada MVCC database modified to allow varying row sizes and granularities of writes.
+- [Modified zIO](https://github.com/AKKamath/zIO) contains the source code of zIO modified to copy elide all memcpy operations instead of just IO-based ones.
