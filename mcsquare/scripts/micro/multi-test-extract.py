@@ -46,8 +46,8 @@ def extract_ticks(file_path):
 
     return experiment_ticks
 
-sizes=[64, 256, "1KB", "4KB", "16KB", "64KB", "256KB", "1MB", "4MB"]
-zio_ignore = [64, 256, "1KB", "4KB"]
+sizes=["64B", "256B", "1KB", "4KB", "16KB", "64KB", "256KB", "1MB", "4MB"]
+zio_ignore = ["64B", "256B", "1KB", "4KB"]
 file1=["(MC)^2", "Memcpy", "zIO"]
 file2="Touched memcpy"
 expts=["Memcpy", "Touched memcpy", "zIO", "(MC)^2"]

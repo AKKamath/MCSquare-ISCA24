@@ -10,9 +10,8 @@ apt install build-essential git m4 scons zlib1g zlib1g-dev \
     python3-dev python-is-python3 libboost-all-dev pkg-config
 
 # zIO requirements
-apt install build-essential make pkg-config autoconf libnuma-dev libaio1 \
-    libaio-dev uuid-dev librdmacm-dev ndctl numactl libncurses-dev libssl-dev \
-    libelf-dev rsync
+apt install make autoconf libnuma-dev libaio1 libaio-dev uuid-dev librdmacm-dev \
+    ndctl numactl libncurses-dev libssl-dev libelf-dev rsync
 
 # Needed for gem5 setup
 apt install wget openjdk-17-jdk openjdk-17-jre
@@ -30,7 +29,7 @@ popd
 mkdir home/akkamath
 pushd home/akkamath
 
-git clone https://github.com/AKKamath/gem5-zIO.git
+git clone https://github.com/AKKamath/MCSquare.git
 pushd gem5-zIO
 git checkout native_inst
 popd

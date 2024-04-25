@@ -46,7 +46,7 @@ def extract_ticks(file_path):
 
     return experiment_ticks
 
-sizes=[64, 256, "1KB", "4KB", "16KB", "64KB", "256KB", "1MB", "4MB"]
+sizes=["64B", "256B", "1KB", "4KB", "16KB", "64KB", "256KB", "1MB", "4MB"]
 expts=["Cacheline writeback", "Packet to memctrl"]
 def main():
     file_path = sys.argv[1]

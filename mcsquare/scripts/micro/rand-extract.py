@@ -64,6 +64,20 @@ def main():
             experiment_ticks[config + " [Aligned]"] = ticks_indiv[len(sizes):]
         else:
             experiment_ticks[config] = ticks_indiv
+    
+    print("Raw performance")
+    print("Access size", end="\t")
+    for config in experiment_ticks.keys():
+        print("%s" % config, end="\t"),
+    print(""),
+
+    i = 0
+    for size in sizes:
+        print("%s%%" % size, end="\t")
+        for config in experiment_ticks.keys():
+            print("%.3f" % (experiment_ticks[config][i]), end="\t")
+        print()
+        i += 1
 
     # Normalize performance
     norm_perf = {}

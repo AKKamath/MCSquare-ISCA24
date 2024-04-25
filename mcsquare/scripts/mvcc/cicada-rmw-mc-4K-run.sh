@@ -39,7 +39,7 @@ m5 exit
 
 for i in 0.0625 0.125 0.25 0.5 1; do
     m5 resetstats
-    LD_PRELOAD=${MC_BIN} ./test_tx ${ROWS} 4 0 0 ${TX} ${THREADS} ${i} 2 ${ROW_SIZE}
+    LD_PRELOAD=${MC_BIN} ./test_tx ${ROWS} 4 0.5 0 ${TX} ${THREADS} ${i} 2 ${ROW_SIZE}
     m5 dumpstats
 done
 

@@ -65,11 +65,11 @@ def main():
     ctt_fracs = sys.argv[2]
     for size in ctt_sizes.split():
         for frac in ctt_fracs.split():
-            extract_time("results/mvcc_sweep/cicada-rmw-mc-4K-" + size + "-" + frac + "/system.pc.com_1.device", size, frac)
-            extract_stalls("results/mvcc_sweep/cicada-rmw-mc-4K-" + size + "-" + frac + "/stats.txt", size, frac)
-            extract_membw("results/mvcc_sweep/cicada-rmw-mc-4K-" + size + "-" + frac + "/stats.txt", size, frac)
+            extract_time("results/mvcc_sweep/cicada-rmw-mc-8T-" + size + "-" + frac + "/system.pc.com_1.device", size, frac)
+            extract_stalls("results/mvcc_sweep/cicada-rmw-mc-8T-" + size + "-" + frac + "/stats.txt", size, frac)
+            extract_membw("results/mvcc_sweep/cicada-rmw-mc-8T-" + size + "-" + frac + "/stats.txt", size, frac)
 
-    extract_time("results/mvcc_sweep/cicada-rmw-4K/system.pc.com_1.device", 0, 0)
+    #extract_time("results/mvcc_sweep/cicada-rmw-8T/system.pc.com_1.device", 0, 0)
 
     print("Throughput")
     if 0 in cpu_time:

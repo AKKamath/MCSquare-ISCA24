@@ -13,7 +13,7 @@ compile_gem5:
 
 ############################################################
 #                DISK IMAGE OPERATIONS
-#  create_img: Create a fresh disk image (untested)
+#  create_img: Create a fresh disk image [Untested]
 #  mount_img: Mount the disk image GEM5_IMG
 #  umount_img: Unmount the image mounted at MNT
 ############################################################
@@ -57,7 +57,7 @@ CTT_FRAC ?= 0.5
 CTT_LAT  ?= "787ps"
 BPQ_SIZE ?= 8
 DEST_WB  ?= 3
-CTT_FREE_SIZE ?= 1
+CTT_FREE_SIZE ?= 4
 
 CMD_LINE ?= "earlyprintk=ttyS0 console=ttyS0 lpj=7999923 root=/dev/hda1 numa=on"
 
@@ -121,6 +121,7 @@ extract_all:
 	$(MAKE) -s extract_hugepage_access > ${RESULTS}/figure_18.txt;
 	$(MAKE) -s extract_pipe > ${RESULTS}/figure_19.txt;
 	$(MAKE) -s extract_src_write > ${RESULTS}/figure_21.txt;
+
 ############################################################
 #                   MICROBENCHMARK LAUNCHERS			   #
 ############################################################
@@ -181,20 +182,20 @@ extract_micro_rand:
 
 # FIGURES 14, 20
 PROTOBUF_TESTS ?= protobuf-mc protobuf protobuf-zio
-PB_CTT_SIZE=1024 2048 4096 8192 16384
+PB_CTT_SIZE=1024 2048 4096
 PB_FLUSH_FRAC=0.1 0.25 0.5 0.75 0.9
 launch_protobuf:
 	sudo ls; \
 	$(MAKE) compile_gem5; \
 	for ctt_frac in ${PB_FLUSH_FRAC}; do \
 		$(MAKE) single_launch_gem5 TEST=protobuf/protobuf-mc-1024-$${ctt_frac} \
-			SCRIPT=./scripts/protobuf/protobuf-mc-run.sh \
+			SCRIPT=./scripts/protobuf/protobuf-mc-run.sh CTT_FREE_SIZE=1 \
 			CTT_SIZE=1024 CTT_FRAC=$${ctt_frac} CTT_LAT="646ps" & \
 		$(MAKE) single_launch_gem5 TEST=protobuf/protobuf-mc-2048-$${ctt_frac} \
-			SCRIPT=./scripts/protobuf/protobuf-mc-run.sh \
+			SCRIPT=./scripts/protobuf/protobuf-mc-run.sh CTT_FREE_SIZE=1 \
 			CTT_SIZE=2048 CTT_FRAC=$${ctt_frac} CTT_LAT="787ps" & \
 		$(MAKE) single_launch_gem5 TEST=protobuf/protobuf-mc-4096-$${ctt_frac} \
-			SCRIPT=./scripts/protobuf/protobuf-mc-run.sh \
+			SCRIPT=./scripts/protobuf/protobuf-mc-run.sh CTT_FREE_SIZE=1 \
 			CTT_SIZE=4096 CTT_FRAC=$${ctt_frac} CTT_LAT="979ps" & \
 	done; \
 	$(MAKE) single_launch_gem5 TEST=protobuf/protobuf & \
@@ -232,6 +233,7 @@ launch_mongo_norm:
 		for i in ${MONGO_TESTS_DUP}; do \
 			$(MAKE) single_launch_gem5 TEST=mongo-new/norm/$${i}-$${j} SCRIPT=./scripts/mongo/$$i-run.sh & \
 		done; \
+	done; \
 	wait;
 
 launch_mongo_zio:
@@ -239,6 +241,7 @@ launch_mongo_zio:
 		for i in ${MONGO_ZIO_TESTS_DUP}; do \
 			$(MAKE) single_launch_gem5 TEST=mongo-new/zio/$${i}-$${j} SCRIPT=./scripts/mongo/$$i-run.sh & \
 		done; \
+	done; \
 	wait;
 
 launch_mongo_mc:
@@ -246,12 +249,13 @@ launch_mongo_mc:
 		for i in ${MONGO_MC_TESTS_DUP}; do \
 			$(MAKE) single_launch_gem5 TEST=mongo-new/mc/$${i}-$${j} SCRIPT=./scripts/mongo/$$i-run.sh & \
 		done; \
+	done; \
 	wait;
 
 extract_mongo:
 	python3 ./scripts/mongo/mongo-extract.py "norm/mongo-100K zio/mongo-100K-zio mc/mongo-100K-mc-all" "Baseline zIO (MC)^2" "${MONGO_ITERS}" ${FIGURES}/figure_15.png
 
-# FIGURES 16, 17
+# FIGURES 16a, 17a
 MVCC_SIZES=4K
 launch_mvcc:
 	sudo ls; \
@@ -264,7 +268,7 @@ launch_mvcc:
 		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-rmw-mc-$${SIZE} & \
 	done; \
 	wait;
-	$(MAKE) -s extract_mvcc > ${RESULTS}/figures_16_17.txt;
+	$(MAKE) -s extract_mvcc > ${RESULTS}/figures_16a_17a.txt;
 
 # zIO gives an error due to not supporting MAP_SHARED
 #		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-zio-$${SIZE} & \
@@ -274,8 +278,29 @@ MVCC_FRAC=0.0625 0.125 0.25 0.5 1
 MVCC_TESTS ?=4K mc-4K nt-mc-4K
 MVCC_RMW_TESTS ?=rmw-4K rmw-mc-4K
 extract_mvcc:
-	python3 scripts/mvcc/cicada-extract.py "${MVCC_RMW_TESTS}" "Baseline (MC)^2" "${MVCC_FRAC}" ${FIGURES}/figure_16.png
-	python3 scripts/mvcc/cicada-extract.py "${MVCC_TESTS}" "Baseline (MC)^2 (MC)^2[Nontemporal]" "${MVCC_FRAC}" ${FIGURES}/figure_17.png
+	-python3 scripts/mvcc/cicada-extract.py "${MVCC_RMW_TESTS}" "Baseline (MC)^2" "${MVCC_FRAC}" ${FIGURES}/figure_16a.png
+	-python3 scripts/mvcc/cicada-extract.py "${MVCC_TESTS}" "Baseline (MC)^2 (MC)^2[Nontemporal]" "${MVCC_FRAC}" ${FIGURES}/figure_17a.png
+
+# FIGURES 16b, 17b
+MVCC_THREADS_DUP=8T
+launch_mvcc_8T:
+	sudo ls; \
+	$(MAKE) compile_gem5; \
+	for SIZE in ${MVCC_THREADS_DUP}; do \
+		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-mc-$${SIZE} & \
+		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-nt-mc-$${SIZE} & \
+		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-$${SIZE} & \
+		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-rmw-$${SIZE} & \
+		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-rmw-mc-$${SIZE} &
+	done; \
+	wait;
+	$(MAKE) -s extract_mvcc_8t > ${RESULTS}/figures_16b_17b.txt;
+
+MVCC_8T_TESTS ?=8T mc-8T nt-mc-8T
+MVCC_RMW_8T_TESTS ?=rmw-8T rmw-mc-8T
+extract_mvcc_8t:
+	-python3 scripts/mvcc/cicada-extract.py "${MVCC_RMW_8T_TESTS}" "Baseline (MC)^2" "${MVCC_FRAC}" ${FIGURES}/figure_16b.png
+	-python3 scripts/mvcc/cicada-extract.py "${MVCC_8T_TESTS}" "Baseline (MC)^2 (MC)^2[Nontemporal]" "${MVCC_FRAC}" ${FIGURES}/figure_17b.png
 
 # FIGURE 18
 launch_hugepage_access:
@@ -290,7 +315,7 @@ extract_hugepage_access:
 	python3 scripts/kernel/page-copy-extract.py "hugepage-copy-rmw-mini hugepage-copy-rmw-mini-lazy" "Native (MC)^2" ${FIGURES}/figure_18.png
 
 # FIGURE 19
-PIPE_SIZES=1K 2K 4K 8K 16K
+PIPE_SIZES ?= 1K 2K 4K 8K 16K
 launch_pipe:
 	sudo ls; \
 	$(MAKE) compile_gem5; \
@@ -322,59 +347,10 @@ launch_src_write:
 extract_src_write:
 	python3 scripts/micro/src-write-extract.py results/micro/src-write/seq-access- "${SRC_WRITE_SIZES}" ${FIGURES}/figure_21.png
 
-############################################################
-#                 EXTRA MISC TESTS (IGNORE)	               #
-############################################################
-
-CTT_OVERFLOW_SIZES=64 256 1024 4096 16384
-launch_ctt_overflow:
-	$(MAKE) compile_gem5;
-	for i in ${CTT_OVERFLOW_SIZES}; do \
-		$(MAKE) single_launch_gem5_debug TEST=micro/overflow/ctt-overflow-$${i} SCRIPT=./scripts/micro/ctt-overflow-run.sh CTT_SIZE=$${i} & \
-	done; \
-	wait;
-
-#
-	
-#	$(MAKE) single_launch_gem5 GEM5_TESTS=kernel/pipe SCRIPT=./scripts/kernel/pipe-run.sh & \
-	$(MAKE) single_launch_gem5 TEST=kernel/pipe-lazy SCRIPT=./scripts/kernel/pipe-run.sh GEM5_KERNEL=./os/vmlinux-5.7-lazycopy & \
-	wait;
-#	python3 scripts/kernel/pipe-extract.py "pipe pipe-lazy"
-
-launch_mvcc_test:
-	sudo ls; \
-	$(MAKE) compile_gem5; \
-	$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-rmw-4K-test & \
-	$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-4K-test & \
-	$(MAKE) single_launch_gem5_debug GEM5_TESTS=mvcc/cicada-rmw-mc-4K-test & \
-	$(MAKE) single_launch_gem5_debug GEM5_TESTS=mvcc/cicada-nt-mc-4K-test & \
-	wait;
-	$(MAKE) extract_mvcc;
-
-launch_mvcc_sweep:
-	sudo ls; \
-	MVCC_SCRIPT=./scripts/mvcc/cicada-rmw-mc-sweep-4K-run.sh; \
-	MVCC_TEST=mvcc_sweep/cicada-rmw-mc-4K; \
-	$(MAKE) compile_gem5; \
-	for ctt_frac in ${PB_FLUSH_FRAC}; do \
-		$(MAKE) single_launch_gem5 TEST=$${MVCC_TEST}-1024-$${ctt_frac} SCRIPT=$${MVCC_SCRIPT} \
-			CTT_SIZE=1024 CTT_FRAC=$${ctt_frac} CTT_LAT="646ps" & \
-		$(MAKE) single_launch_gem5 TEST=$${MVCC_TEST}-2048-$${ctt_frac} SCRIPT=$${MVCC_SCRIPT} \
-			CTT_SIZE=2048 CTT_FRAC=$${ctt_frac} CTT_LAT="787ps" & \
-		$(MAKE) single_launch_gem5 TEST=$${MVCC_TEST}-4096-$${ctt_frac} SCRIPT=$${MVCC_SCRIPT} \
-			CTT_SIZE=4096 CTT_FRAC=$${ctt_frac} CTT_LAT="979ps" & \
-		$(MAKE) single_launch_gem5 TEST=$${MVCC_TEST}-8192-$${ctt_frac} SCRIPT=$${MVCC_SCRIPT} \
-			CTT_SIZE=8192 CTT_FRAC=$${ctt_frac} CTT_LAT="1060ps" & \
-		$(MAKE) single_launch_gem5 TEST=$${MVCC_TEST}-16384-$${ctt_frac} SCRIPT=$${MVCC_SCRIPT} \
-			CTT_SIZE=16384 CTT_FRAC=$${ctt_frac} CTT_LAT="1352ps" & \
-	done; \
-	wait;
-	$(MAKE) single_launch_gem5 TEST=mvcc_sweep/cicada-rmw-4K \
-		SCRIPT=./scripts/mvcc/cicada-rmw-sweep-4K-run.sh & \
-
+# FIGURE 22
 MVCC_FREE_SIZE=1 2 4 8
 MVCC_THREADS=1 2 4 8
-launch_mvcc_sweep2:
+launch_ctt_free:
 	sudo ls; \
 	$(MAKE) compile_gem5; \
 	MVCC_SCRIPT=./scripts/mvcc/cicada-rmw-mc-sweep; \
@@ -387,54 +363,8 @@ launch_mvcc_sweep2:
 		$(MAKE) single_launch_gem5 TEST=mvcc_sweep2/cicada-rmw-$${thread}T \
 			SCRIPT=./scripts/mvcc/cicada-rmw-sweep-$${thread}T-run.sh & \
 	done; \
-	$(MAKE) extract_mvcc_sweep_dup;
-
-extract_mvcc_sweep_dup:
-	python3 scripts/mvcc/cicada-dup-extract.py "${MVCC_THREADS}" "${MVCC_FREE_SIZE}"
-
-extract_mvcc_sweep:
-	tests=""; \
-	for ctt_frac in ${PB_FLUSH_FRAC}; do \
-		for ctt_size in 1024 2048 4096 8192 16384; do \
-			tests2="$${tests}mvcc_sweep/cicada-rmw-mc-4K-$${ctt_size}-$${ctt_frac} "; \
-			tests=$${tests2}; \
-		done; \
-	done; \
-	tests2="$${tests}mvcc_sweep/cicada-rmw-4K "; \
-	tests=$${tests2}; \
-	echo $${tests}; \
-	printf "Throughput\t"; \
-	for FRAC in ${MVCC_FRAC}; do \
-		printf "$${FRAC}\t"; \
-	done; \
-	printf "\n";\
-	for SIZE in ${MVCC_SIZES}; do \
-		for TEST in $${tests}; do \
-			printf "$${TEST}\t"; \
-			thput=$$(grep "throughput" ${RESULTS}/$${TEST}/system.pc.com_1.device | grep -oE "[0-9]+\.[0-9]+" | tail -n +2); \
-			for i in $${thput}; do \
-				printf "$${i}\t"; \
-			done; \
-			printf "\n"; \
-		done; \
-	done;
-
-extract_mvcc_sweep2:
-	python3 scripts/mvcc/cicada-sweep-extract.py "${PB_CTT_SIZE}" "${PB_FLUSH_FRAC}"
-
-PIPE_MULTI_SIZES ?= 1K 2K 4K 8K 16K
-THREADS ?= 1 2 4
-launch_pipe_multi:
-	sudo ls; \
-	$(MAKE) compile_gem5; \
-	for i in ${PIPE_MULTI_SIZES}; do \
-		for j in ${THREADS}; do \
-			$(MAKE) single_launch_gem5 TEST=kernel/pipe/big-pipe-$${j}T-$${i} SCRIPT=./scripts/kernel/pipe/big-pipe-$${i}-$${j}T-run.sh & \
-			$(MAKE) single_launch_gem5 TEST=kernel/pipe/big-pipe-lazy-$${j}T-$${i} SCRIPT=./scripts/kernel/pipe/big-pipe-$${i}-$${j}T-run.sh GEM5_KERNEL=./os/vmlinux-5.7-lazycopy2 & \
-		done; \
-	done; \
 	wait;
-	$(MAKE) -s extract_pipe_multi > ${RESULTS}/figure_33.txt;
+	$(MAKE) extract_ctt_free > ${RESULTS}/figure_22.txt;
 
-extract_pipe_multi:
-	python3 scripts/kernel/pipe-multi-extract.py "big-pipe big-pipe-lazy" "${THREADS}" "Native (MC)^2" "${PIPE_MULTI_SIZES}" ${FIGURES}/figure_33.png
+extract_ctt_free:
+	python3 scripts/mvcc/cicada-dup-extract.py "${MVCC_THREADS}" "${MVCC_FREE_SIZE}"

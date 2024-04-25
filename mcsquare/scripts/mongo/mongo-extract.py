@@ -54,17 +54,19 @@ def main():
     print("Insertion latency (ms)")
     for index in range(len(expts)):
         if(expts[index] not in wall_time):
-            print("OUTPUT OF " + expt + " NOT FOUND. RERUN MONGO!")
-            return
+            print("OUTPUT OF " + expts[index] + " NOT FOUND. RERUN MONGO!")
+            continue
         if(len(wall_time[expts[index]]) < 3):
-            print("\n\n" + expts[index] + " HAD AN ERROR. TO RERUN EXPERIMENT EXECUTE: make launch_mongo_{:s}\n\n".format(expt.split("/")[0]))
-            return
+            print("\n\n" + expts[index] + " HAD AN ERROR. TO RERUN EXPERIMENT EXECUTE: make launch_mongo_{:s}\n\n".format(expts[index].split("/")[0]))
+            #return
         print(labels[index], end="\t")
-        avg_latency.append(sum(wall_time[expts[index]][:3]) / 3000)
-        print("%.2f" % (avg_latency[index]), end="\t")
+        for i in wall_time[expts[index]]:
+            print("%.2f" % (i), end="\t")
+        if(len(wall_time[expts[index]])):
+            avg_latency.append(sum(wall_time[expts[index]][:]) / (len(wall_time[expts[index]]) * 1000))
+            print("Avg %.2f" % (avg_latency[-1]), end="\t")
         print()
     
-    bar_labels=labels
     import matplotlib.pyplot as plt
     import numpy as np
     plt.figure(figsize=(8, 4))
