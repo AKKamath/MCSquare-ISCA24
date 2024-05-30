@@ -256,7 +256,7 @@ extract_mongo:
 	python3 ./scripts/mongo/mongo-extract.py "norm/mongo-100K zio/mongo-100K-zio mc/mongo-100K-mc-all" "Baseline zIO (MC)^2" "${MONGO_ITERS}" ${FIGURES}/figure_15.png
 
 # FIGURES 16a, 17a
-MVCC_SIZES=4K
+MVCC_SIZES=8K
 launch_mvcc:
 	sudo ls; \
 	$(MAKE) compile_gem5; \
@@ -275,8 +275,8 @@ launch_mvcc:
 		$(MAKE) single_launch_gem5 GEM5_TESTS=mvcc/cicada-rmw-zio-$${SIZE} & \
 
 MVCC_FRAC=0.0625 0.125 0.25 0.5 1
-MVCC_TESTS ?=4K mc-4K nt-mc-4K
-MVCC_RMW_TESTS ?=rmw-4K rmw-mc-4K
+MVCC_TESTS ?=8K mc-8K nt-mc-8K
+MVCC_RMW_TESTS ?=rmw-8K rmw-mc-8K
 extract_mvcc:
 	-python3 scripts/mvcc/cicada-extract.py "${MVCC_RMW_TESTS}" "Baseline (MC)^2" "${MVCC_FRAC}" ${FIGURES}/figure_16a.png
 	-python3 scripts/mvcc/cicada-extract.py "${MVCC_TESTS}" "Baseline (MC)^2 (MC)^2[Nontemporal]" "${MVCC_FRAC}" ${FIGURES}/figure_17a.png
