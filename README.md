@@ -20,6 +20,7 @@ Ensure that your machine supports KVM, as this is used during our simulations. T
 egrep -c '(vmx|svm)' /proc/cpuinfo
 ```
 
+### Dependencies
 Ubuntu 20.04 or 22.04 is preferred.
 The following commands installs all the dependencies for Ubuntu 22.04:
 ```bash
@@ -29,6 +30,18 @@ sudo apt install build-essential git m4 scons zlib1g zlib1g-dev \
     libboost-all-dev pkg-config python3-tk libvirt-clients \
     bridge-utils python3-matplotlib python3-numpy
 ```
+
+### Building the gem5 executable
+To generate the gem5 executable, you can run the following command, replacing {cpus} with the number of threads to use to build. 
+When running experiments, this command is automatically executed by the Makefile. 
+```bash
+scons build/X86/gem5.opt -j {cpus}
+```
+
+### Obtaining disk images
+The disk images used for our evaluation can be downloaded from here: https://zenodo.org/records/11479488   
+Unzip this file, and place the os folder inside the mcsquare folder in this repository.
+
 ## Running experiments
 
 ### Individually executing experiments
