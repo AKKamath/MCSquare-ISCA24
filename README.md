@@ -6,6 +6,15 @@ $(MC)^{2}$ is a hardware extension that provides support for a lazy memcpy opera
 
 This operation avoids copying data at the time of function call.  Instead, if copied destinations are later accessed, $(MC)^{2}$ uses tracking information to seamlessly reroute the request to the appropriate source, while lazily executing copies only when necessary. $(MC)^{2}$ modifies the memory controller and has been implemented using gem5, a CPU simulator.
 
+For full details on the different mechanisms we evaluate, please refer to our full paper:
+<pre>
+<b>(MC)^2: Lazy MemCopy at the Memory Controller</b>
+Aditya K Kamath, Simon Peter
+<i>[To Appear] ACM/IEEE 51st Annual International Symposium on Computer Architecture (ISCA), 2024</i>
+</pre>
+
+
+
 This repository consists of the source code of the simulator and all scripts needed to replicate the figures in the paper.
 
 The original readme for gem5 has been retained as [README](./README).
@@ -40,7 +49,8 @@ scons build/X86/gem5.opt -j {cpus}
 
 ### Obtaining disk images
 The disk images used for our evaluation can be downloaded from here: https://zenodo.org/records/11479488   
-Unzip this file, and place the os folder inside the mcsquare folder in this repository.
+Unzip this file, and place the os folder inside the mcsquare folder in this repository.   
+This folder structure should look like: ```MCSquare-ISCA24/mcsquare/os/```
 
 ## Running experiments
 
