@@ -6,11 +6,12 @@ $(MC)^{2}$ is a hardware extension that provides support for a lazy memcpy opera
 
 This operation avoids copying data at the time of function call.  Instead, if copied destinations are later accessed, $(MC)^{2}$ uses tracking information to seamlessly reroute the request to the appropriate source, while lazily executing copies only when necessary. $(MC)^{2}$ modifies the memory controller and has been implemented using gem5, a CPU simulator.
 
-For full details on the different mechanisms we evaluate, please refer to our [paper](https://akkamath.github.io/publication/ISCA24-MCSquare):
+For full details on the different mechanisms we evaluate, please refer to our paper: [[Paper]](https://akkamath.github.io/publication/ISCA24-MCSquare) [[Video]](https://youtu.be/gMgQGgUI1xA)
 <pre>
 <b>(MC)^2: Lazy MemCopy at the Memory Controller</b>
 Aditya K Kamath, Simon Peter
 <i>ACM/IEEE 51st Annual International Symposium on Computer Architecture (ISCA), 2024</i>
+DOI: https://doi.org/10.1109/ISCA59077.2024.00084
 </pre>
 
 This repository consists of the source code of the simulator and all scripts needed to replicate the figures in the paper.
