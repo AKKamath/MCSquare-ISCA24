@@ -94,3 +94,23 @@ The functionality for $(MC)^{2}$ is encapsulated in [src/mem/mcsquare.cc](./src/
 - [Modified linux](https://github.com/AKKamath/linux-5.7) contains the source code of Linux modified to use lazy copies on huge page faults and when writing to/reading from pipes.
 - [Modified Cicada](https://github.com/AKKamath/cicada-engine) contains the source code of the Cicada MVCC database modified to allow varying row sizes and granularities of writes.
 - [Modified zIO](https://github.com/AKKamath/zIO) contains the source code of zIO modified to copy elide all memcpy operations instead of just IO-based ones.
+
+# Citation
+If you use our work, please cite our paper:
+<pre>
+@inproceedings{10.1109/ISCA59077.2024.00084,
+  author = {Kamath, Aditya K and Peter, Simon},
+  title = {(MC)2: Lazy MemCopy at the Memory Controller},
+  year = {2024},
+  isbn = {9798350326581},
+  publisher = {IEEE Press},
+  url = {https://doi.org/10.1109/ISCA59077.2024.00084},
+  doi = {10.1109/ISCA59077.2024.00084},
+  booktitle = {Proceedings of the 51st Annual International Symposium on Computer Architecture},
+  pages = {1112–1128},
+  numpages = {17},
+  keywords = {lazy copy, memcpy, data transfer, memory controller, memory, DRAM},
+  location = {Buenos Aires, Argentina},
+  series = {ISCA '24}
+}
+</pre>
